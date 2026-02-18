@@ -849,10 +849,19 @@ impl App {
 
         let is_scanning = self.scan_receiver.is_some();
         let scan_indicator = if is_scanning {
-            format!(
-                " [Scanning {} / {}]",
-                self.scan_progress.scanners_done, self.scan_progress.total_scanners
-            )
+            let done = self.scan_progress.scanners_done;
+            let total = self.scan_progress.total_scanners;
+            let current = &self.scan_progress.current_scanner;
+
+            let bar_width = 8;
+            let filled = if total > 0 {
+                (done * bar_width) / total
+            } else {
+                0
+            };
+            let bar: String = "█".repeat(filled) + &"░".repeat(bar_width.saturating_sub(filled));
+
+            format!(" [{} {}/{} {}]", bar, done, total, current)
         } else {
             String::new()
         };
