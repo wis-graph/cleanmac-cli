@@ -867,6 +867,33 @@ impl App {
         }
     }
 
+    fn truncate_path_middle(path: &str, max_len: usize) -> String {
+        if path.len() <= max_len {
+            return path.to_string();
+        }
+
+        let segments: Vec<&str> = path.split(std::path::MAIN_SEPARATOR).collect();
+
+        if segments.len() <= 4 {
+            return path.to_string();
+        }
+
+        let head_count = 2;
+        let tail_count = 2;
+
+        let head: String = segments[..head_count].join(&std::path::MAIN_SEPARATOR.to_string());
+        let tail: String =
+            segments[segments.len() - tail_count..].join(&std::path::MAIN_SEPARATOR.to_string());
+
+        format!(
+            "{}{}...{}{}",
+            head,
+            std::path::MAIN_SEPARATOR,
+            std::path::MAIN_SEPARATOR,
+            tail
+        )
+    }
+
     fn render_header(&self, f: &mut Frame, area: Rect) {
         let total_size: u64 = self.report.as_ref().map(|r| r.total_size).unwrap_or(0);
 
@@ -919,11 +946,7 @@ impl App {
             f.render_widget(header, chunks[0]);
 
             let current_path = self.scan_progress.current_path.as_deref().unwrap_or("");
-            let truncated = if current_path.len() > 80 {
-                format!("...{}", &current_path[current_path.len() - 77..])
-            } else {
-                current_path.to_string()
-            };
+            let truncated = Self::truncate_path_middle(current_path, 80);
             let scan_line = Paragraph::new(Line::from(vec![
                 Span::styled(" Scanning: ", Style::default().fg(Color::DarkGray)),
                 Span::styled(truncated, Style::default().fg(Color::Gray)),
