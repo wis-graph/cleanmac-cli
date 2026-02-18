@@ -65,6 +65,7 @@ pub struct App {
     apps_mode: AppsModeState,
     scan_receiver: Option<Receiver<ScanMessage>>,
     available_scanners: Vec<ScannerInfo>,
+    sort_mode: SortMode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -78,6 +79,35 @@ pub enum AppMode {
     LoadingRelatedFiles,
     UninstallReview,
     UninstallResult,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+enum SortMode {
+    #[default]
+    SizeDesc,
+    SizeAsc,
+    NameAsc,
+    NameDesc,
+}
+
+impl SortMode {
+    fn next(self) -> Self {
+        match self {
+            SortMode::SizeDesc => SortMode::SizeAsc,
+            SortMode::SizeAsc => SortMode::NameAsc,
+            SortMode::NameAsc => SortMode::NameDesc,
+            SortMode::NameDesc => SortMode::SizeDesc,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            SortMode::SizeDesc => "Size ↓",
+            SortMode::SizeAsc => "Size ↑",
+            SortMode::NameAsc => "Name A-Z",
+            SortMode::NameDesc => "Name Z-A",
+        }
+    }
 }
 
 struct AppsModeState {
@@ -194,6 +224,7 @@ impl App {
             apps_mode: AppsModeState::default(),
             scan_receiver: None,
             available_scanners,
+            sort_mode: SortMode::default(),
         }
     }
 
@@ -403,6 +434,7 @@ impl App {
             },
             scan_receiver: None,
             available_scanners: Vec::new(),
+            sort_mode: SortMode::default(),
         };
 
         if !app.apps_mode.apps.is_empty() {
@@ -615,6 +647,10 @@ impl App {
                 self.selected_items.clear();
                 self.report = None;
                 self.start_scan();
+            }
+            KeyCode::Char('s') => {
+                self.sort_mode = self.sort_mode.next();
+                self.apply_sort();
             }
             _ => {}
         }
@@ -921,6 +957,53 @@ impl App {
         }
     }
 
+    fn apply_sort(&mut self) {
+        if let Some(ref mut report) = self.report {
+            for category in &mut report.categories {
+                match self.sort_mode {
+                    SortMode::SizeDesc => {
+                        category.items.sort_by(|a, b| b.size.cmp(&a.size));
+                    }
+                    SortMode::SizeAsc => {
+                        category.items.sort_by(|a, b| a.size.cmp(&b.size));
+                    }
+                    SortMode::NameAsc => {
+                        category.items.sort_by(|a, b| {
+                            a.path
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("")
+                                .to_lowercase()
+                                .cmp(
+                                    &b.path
+                                        .file_name()
+                                        .and_then(|n| n.to_str())
+                                        .unwrap_or("")
+                                        .to_lowercase(),
+                                )
+                        });
+                    }
+                    SortMode::NameDesc => {
+                        category.items.sort_by(|a, b| {
+                            b.path
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("")
+                                .to_lowercase()
+                                .cmp(
+                                    &a.path
+                                        .file_name()
+                                        .and_then(|n| n.to_str())
+                                        .unwrap_or("")
+                                        .to_lowercase(),
+                                )
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     fn render(&mut self, f: &mut Frame) {
         match self.mode {
             AppMode::CategorySelect => {
@@ -1069,6 +1152,11 @@ impl App {
                         format_size(selected_size)
                     ),
                     Style::default().fg(Color::Green),
+                ),
+                Span::raw("   "),
+                Span::styled(
+                    format!("[{}]", self.sort_mode.label()),
+                    Style::default().fg(Color::DarkGray),
                 ),
                 Span::styled(scan_indicator, Style::default().fg(Color::Yellow)),
             ]))
@@ -1266,6 +1354,8 @@ impl App {
             Span::raw(" Nav  "),
             Span::styled("←→", Style::default().fg(Color::Cyan)),
             Span::raw(" Cat  "),
+            Span::styled("s", Style::default().fg(Color::Cyan)),
+            Span::raw(" Sort  "),
             Span::styled("Space", Style::default().fg(Color::Cyan)),
             Span::raw(" Select  "),
             Span::styled("a", Style::default().fg(Color::Cyan)),
