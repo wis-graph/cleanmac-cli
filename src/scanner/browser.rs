@@ -80,24 +80,30 @@ impl Scanner for BrowserCacheScanner {
                 continue;
             }
 
+            config.report_progress(&cache_path.display().to_string());
+
             let size = calculate_dir_size(cache_path);
 
             if size >= config.min_size {
                 let file_count = count_files(cache_path);
 
-                items.push(
-                    ScanResult::new(
-                        format!("browser_{}", browser_name.to_lowercase()),
-                        format!("{} Cache", browser_name),
-                        cache_path.clone(),
-                    )
-                    .with_size(size)
-                    .with_file_count(file_count)
-                    .with_category(ScannerCategory::Browser)
-                    .with_safety(SafetyLevel::Safe)
-                    .with_last_accessed(get_last_accessed(cache_path))
-                    .with_last_modified(get_last_modified(cache_path)),
-                );
+                let mut item = ScanResult::new(
+                    format!("browser_{}", browser_name.to_lowercase()),
+                    format!("{} Cache", browser_name),
+                    cache_path.clone(),
+                )
+                .with_size(size)
+                .with_file_count(file_count)
+                .with_category(ScannerCategory::Browser)
+                .with_safety(SafetyLevel::Safe)
+                .with_last_accessed(get_last_accessed(cache_path))
+                .with_last_modified(get_last_modified(cache_path));
+
+                item.metadata
+                    .insert("scanner_id".to_string(), self.id().to_string());
+
+                config.report_item(item.clone());
+                items.push(item);
             }
         }
 

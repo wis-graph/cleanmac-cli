@@ -92,6 +92,7 @@ fn run_scan(category: &str, config: &Config) -> Result<()> {
             .collect(),
         follow_symlinks: config.scan.follow_symlinks,
         progress_callback: None,
+        item_callback: None,
     };
 
     let report = registry.scan_all(&scan_config)?;
@@ -144,6 +145,7 @@ fn run_clean(category: &str, execute: bool, config: &Config) -> Result<()> {
             .collect(),
         follow_symlinks: config.scan.follow_symlinks,
         progress_callback: None,
+        item_callback: None,
     };
 
     let report = registry.scan_all(&scan_config)?;

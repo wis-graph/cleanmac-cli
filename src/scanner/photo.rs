@@ -73,19 +73,23 @@ impl Scanner for PhotoJunkScanner {
                 continue;
             }
 
-            items.push(
-                ScanResult::new(
-                    format!("photo_{}", items.len()),
-                    format!("Photos - {}", label),
-                    path.clone(),
-                )
-                .with_size(size)
-                .with_file_count(count_files(path))
-                .with_category(ScannerCategory::System)
-                .with_safety(SafetyLevel::Caution)
-                .with_last_accessed(get_last_accessed(path))
-                .with_last_modified(get_last_modified(path)),
-            );
+            let mut item = ScanResult::new(
+                format!("photo_{}", items.len()),
+                format!("Photos - {}", label),
+                path.clone(),
+            )
+            .with_size(size)
+            .with_file_count(count_files(path))
+            .with_category(ScannerCategory::System)
+            .with_safety(SafetyLevel::Caution)
+            .with_last_accessed(get_last_accessed(path))
+            .with_last_modified(get_last_modified(path));
+
+            item.metadata
+                .insert("scanner_id".to_string(), self.id().to_string());
+
+            config.report_item(item.clone());
+            items.push(item);
         }
 
         items.sort_by(|a, b| b.size.cmp(&a.size));

@@ -57,6 +57,8 @@ impl Scanner for LogScanner {
                     continue;
                 }
 
+                config.report_progress(&path.display().to_string());
+
                 let (size, file_count) = if entry.file_type().is_dir() {
                     (calculate_dir_size(path), count_files(path))
                 } else if entry.file_type().is_file() {
@@ -75,15 +77,20 @@ impl Scanner for LogScanner {
 
                     let safety_level = self.safety_checker.check_path(path);
 
-                    items.push(
+                    let mut item =
                         ScanResult::new(format!("log_{}", items.len()), name, path.to_path_buf())
                             .with_size(size)
                             .with_file_count(file_count)
                             .with_category(ScannerCategory::System)
                             .with_safety(safety_level)
                             .with_last_accessed(get_last_accessed(path))
-                            .with_last_modified(get_last_modified(path)),
-                    );
+                            .with_last_modified(get_last_modified(path));
+
+                    item.metadata
+                        .insert("scanner_id".to_string(), self.id().to_string());
+
+                    config.report_item(item.clone());
+                    items.push(item);
                 }
             }
         }

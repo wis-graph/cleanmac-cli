@@ -146,19 +146,23 @@ impl Scanner for LargeOldFilesScanner {
 
             let last_modified = metadata.modified().ok().map(|t| t.into());
 
-            items.push(
-                ScanResult::new(
-                    format!("large_file_{}", items.len()),
-                    file_name,
-                    path.to_path_buf(),
-                )
-                .with_size(size)
-                .with_file_count(1)
-                .with_category(ScannerCategory::System)
-                .with_safety(SafetyLevel::Caution)
-                .with_last_accessed(last_accessed)
-                .with_last_modified(last_modified),
-            );
+            let mut item = ScanResult::new(
+                format!("large_file_{}", items.len()),
+                file_name,
+                path.to_path_buf(),
+            )
+            .with_size(size)
+            .with_file_count(1)
+            .with_category(ScannerCategory::System)
+            .with_safety(SafetyLevel::Caution)
+            .with_last_accessed(last_accessed)
+            .with_last_modified(last_modified);
+
+            item.metadata
+                .insert("scanner_id".to_string(), self.id().to_string());
+
+            config.report_item(item.clone());
+            items.push(item);
         }
 
         items.sort_by(|a, b| b.size.cmp(&a.size));

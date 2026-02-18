@@ -87,19 +87,23 @@ impl Scanner for DevJunkScanner {
 
                         let safety_level = self.safety_checker.check_path(&entry);
 
-                        items.push(
-                            ScanResult::new(
-                                format!("dev_{}_{}", pattern_name, items.len()),
-                                format!("{} ({})", name, pattern_name),
-                                entry.clone(),
-                            )
-                            .with_size(size)
-                            .with_file_count(count_files(&entry))
-                            .with_category(ScannerCategory::Development)
-                            .with_safety(safety_level)
-                            .with_last_accessed(get_last_accessed(&entry))
-                            .with_last_modified(get_last_modified(&entry)),
-                        );
+                        let mut item = ScanResult::new(
+                            format!("dev_{}_{}", pattern_name, items.len()),
+                            format!("{} ({})", name, pattern_name),
+                            entry.clone(),
+                        )
+                        .with_size(size)
+                        .with_file_count(count_files(&entry))
+                        .with_category(ScannerCategory::Development)
+                        .with_safety(safety_level)
+                        .with_last_accessed(get_last_accessed(&entry))
+                        .with_last_modified(get_last_modified(&entry));
+
+                        item.metadata
+                            .insert("scanner_id".to_string(), self.id().to_string());
+
+                        config.report_item(item.clone());
+                        items.push(item);
                     }
                 }
             }

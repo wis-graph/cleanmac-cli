@@ -40,6 +40,7 @@ pub struct ScanConfig {
     pub excluded_paths: Vec<PathBuf>,
     pub follow_symlinks: bool,
     pub progress_callback: Option<Arc<dyn Fn(&str) + Send + Sync>>,
+    pub item_callback: Option<Arc<dyn Fn(ScanResult) + Send + Sync>>,
 }
 
 impl Default for ScanConfig {
@@ -50,6 +51,7 @@ impl Default for ScanConfig {
             excluded_paths: Vec::new(),
             follow_symlinks: false,
             progress_callback: None,
+            item_callback: None,
         }
     }
 }
@@ -58,6 +60,12 @@ impl ScanConfig {
     pub fn report_progress(&self, path: &str) {
         if let Some(cb) = &self.progress_callback {
             cb(path);
+        }
+    }
+
+    pub fn report_item(&self, item: ScanResult) {
+        if let Some(cb) = &self.item_callback {
+            cb(item);
         }
     }
 }

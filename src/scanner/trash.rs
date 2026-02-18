@@ -45,20 +45,26 @@ impl Scanner for TrashScanner {
                 continue;
             }
 
+            config.report_progress(&trash_path.display().to_string());
+
             let size = calculate_dir_size(trash_path);
 
             if size > 0 {
                 let file_count = count_files(trash_path);
 
-                items.push(
-                    ScanResult::new("trash_main", "Trash", trash_path.clone())
-                        .with_size(size)
-                        .with_file_count(file_count)
-                        .with_category(ScannerCategory::Trash)
-                        .with_safety(SafetyLevel::Safe)
-                        .with_last_accessed(get_last_accessed(trash_path))
-                        .with_last_modified(get_last_modified(trash_path)),
-                );
+                let mut item = ScanResult::new("trash_main", "Trash", trash_path.clone())
+                    .with_size(size)
+                    .with_file_count(file_count)
+                    .with_category(ScannerCategory::Trash)
+                    .with_safety(SafetyLevel::Safe)
+                    .with_last_accessed(get_last_accessed(trash_path))
+                    .with_last_modified(get_last_modified(trash_path));
+
+                item.metadata
+                    .insert("scanner_id".to_string(), self.id().to_string());
+
+                config.report_item(item.clone());
+                items.push(item);
             }
         }
 

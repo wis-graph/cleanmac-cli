@@ -61,6 +61,8 @@ impl Scanner for CacheScanner {
                     continue;
                 }
 
+                config.report_progress(&path.display().to_string());
+
                 let size = calculate_dir_size(path);
 
                 if size >= config.min_size {
@@ -72,15 +74,20 @@ impl Scanner for CacheScanner {
 
                     let safety_level = self.safety_checker.check_path(path);
 
-                    items.push(
+                    let mut item =
                         ScanResult::new(format!("cache_{}", items.len()), name, path.to_path_buf())
                             .with_size(size)
                             .with_file_count(count_files(path))
                             .with_category(ScannerCategory::System)
                             .with_safety(safety_level)
                             .with_last_accessed(get_last_accessed(path))
-                            .with_last_modified(get_last_modified(path)),
-                    );
+                            .with_last_modified(get_last_modified(path));
+
+                    item.metadata
+                        .insert("scanner_id".to_string(), self.id().to_string());
+
+                    config.report_item(item.clone());
+                    items.push(item);
                 }
             }
         }

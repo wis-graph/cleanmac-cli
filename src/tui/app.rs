@@ -212,6 +212,7 @@ impl App {
         let (tx, rx) = mpsc::channel();
 
         let progress_tx = tx.clone();
+        let item_tx = tx.clone();
         let scan_config = ScanConfig {
             min_size: self.config.scan.min_size_bytes,
             max_depth: self.config.scan.max_depth,
@@ -227,6 +228,10 @@ impl App {
                 let _ = progress_tx.send(ScanMessage::ScanningPath {
                     path: path.to_string(),
                 });
+            })),
+            item_callback: Some(std::sync::Arc::new(move |item: ScanResult| {
+                let scanner_id = item.metadata.get("scanner_id").cloned().unwrap_or_default();
+                let _ = item_tx.send(ScanMessage::ItemFound { scanner_id, item });
             })),
         };
 
@@ -296,8 +301,6 @@ impl App {
                 .collect();
 
             let total = scanners.len();
-            let mut total_size: u64 = 0;
-            let mut total_items: usize = 0;
 
             for (idx, (id, scanner, category)) in scanners.into_iter().enumerate() {
                 let name = scanner.name().to_string();
@@ -309,16 +312,7 @@ impl App {
                     total,
                 });
 
-                let results = scanner.scan(&scan_config).unwrap_or_default();
-                total_items += results.len();
-
-                for item in results {
-                    total_size += item.size;
-                    let _ = tx.send(ScanMessage::ItemFound {
-                        scanner_id: scanner_id.clone(),
-                        item,
-                    });
-                }
+                let _ = scanner.scan(&scan_config);
 
                 let _ = tx.send(ScanMessage::ScannerDone {
                     scanner_id,
@@ -328,8 +322,8 @@ impl App {
             }
 
             let _ = tx.send(ScanMessage::ScanComplete {
-                total_size,
-                total_items,
+                total_size: 0,
+                total_items: 0,
             });
         });
     }
@@ -442,6 +436,9 @@ impl App {
                     }
                     ScanMessage::ItemFound { scanner_id, item } => {
                         if let Some(ref mut report) = self.report {
+                            report.total_size += item.size;
+                            report.total_items += 1;
+
                             if let Some(cat) = report
                                 .categories
                                 .iter_mut()

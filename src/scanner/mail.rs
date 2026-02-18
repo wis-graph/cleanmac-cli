@@ -101,15 +101,20 @@ impl Scanner for MailAttachmentsScanner {
                     format!("{} ({})", name, label)
                 };
 
-                items.push(
+                let mut item =
                     ScanResult::new(format!("mail_{}", items.len()), display_name, dir.clone())
                         .with_size(size)
                         .with_file_count(count_files(&dir))
                         .with_category(ScannerCategory::System)
                         .with_safety(SafetyLevel::Caution)
                         .with_last_accessed(get_last_accessed(&dir))
-                        .with_last_modified(get_last_modified(&dir)),
-                );
+                        .with_last_modified(get_last_modified(&dir));
+
+                item.metadata
+                    .insert("scanner_id".to_string(), self.id().to_string());
+
+                config.report_item(item.clone());
+                items.push(item);
             }
         }
 
