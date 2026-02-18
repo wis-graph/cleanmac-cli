@@ -18,6 +18,21 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant};
 
+enum ScanMessage {
+    ScannerStart {
+        name: String,
+        index: usize,
+        total: usize,
+    },
+    ScannerDone {
+        category: CategoryScanResult,
+    },
+    ScanComplete {
+        total_size: u64,
+        total_items: usize,
+    },
+}
+
 pub struct App {
     config: Config,
     registry: PluginRegistry,
@@ -33,6 +48,7 @@ pub struct App {
     scan_progress: ScanProgress,
     clean_result: Option<CleanResultDisplay>,
     apps_mode: AppsModeState,
+    scan_receiver: Option<Receiver<ScanMessage>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -98,6 +114,87 @@ struct CleanResultDisplay {
 
 impl App {
     pub fn new(config: Config) -> Self {
+        let (tx, rx) = mpsc::channel();
+
+        let scan_config = ScanConfig {
+            min_size: config.scan.min_size_bytes,
+            max_depth: config.scan.max_depth,
+            excluded_paths: config
+                .scan
+                .excluded_paths
+                .iter()
+                .map(|s| s.into())
+                .collect(),
+            follow_symlinks: config.scan.follow_symlinks,
+        };
+
+        thread::spawn(move || {
+            let scanners: Vec<(&str, Box<dyn Scanner>, crate::plugin::ScannerCategory)> = vec![
+                (
+                    "System Caches",
+                    Box::new(crate::scanner::CacheScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::System,
+                ),
+                (
+                    "System Logs",
+                    Box::new(crate::scanner::LogScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::System,
+                ),
+                (
+                    "Trash",
+                    Box::new(crate::scanner::TrashScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::Trash,
+                ),
+                (
+                    "Browser Caches",
+                    Box::new(crate::scanner::BrowserCacheScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::Browser,
+                ),
+                (
+                    "Development Junk",
+                    Box::new(crate::scanner::DevJunkScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::Development,
+                ),
+                (
+                    "Large & Old Files",
+                    Box::new(crate::scanner::LargeOldFilesScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::System,
+                ),
+            ];
+
+            let total = scanners.len();
+            let mut total_size: u64 = 0;
+            let mut total_items: usize = 0;
+
+            for (idx, (name, scanner, category)) in scanners.into_iter().enumerate() {
+                let _ = tx.send(ScanMessage::ScannerStart {
+                    name: name.to_string(),
+                    index: idx,
+                    total,
+                });
+
+                let results = scanner.scan(&scan_config).unwrap_or_default();
+
+                let cat = CategoryScanResult {
+                    scanner_id: scanner.id().to_string(),
+                    name: name.to_string(),
+                    category,
+                    icon: String::new(),
+                    items: results,
+                };
+
+                total_size += cat.total_size();
+                total_items += cat.items.len();
+
+                let _ = tx.send(ScanMessage::ScannerDone { category: cat });
+            }
+
+            let _ = tx.send(ScanMessage::ScanComplete {
+                total_size,
+                total_items,
+            });
+        });
+
         Self {
             config,
             registry: PluginRegistry::default(),
@@ -113,6 +210,7 @@ impl App {
             scan_progress: ScanProgress::default(),
             clean_result: None,
             apps_mode: AppsModeState::default(),
+            scan_receiver: Some(rx),
         }
     }
 
@@ -167,6 +265,7 @@ impl App {
                 size_receiver: Some(rx),
                 ..Default::default()
             },
+            scan_receiver: None,
         };
 
         if !app.apps_mode.apps.is_empty() {
@@ -177,10 +276,6 @@ impl App {
     }
 
     pub fn run(&mut self, terminal: &mut Terminal<impl ratatui::backend::Backend>) -> Result<()> {
-        if self.mode == AppMode::Scanning {
-            self.scan_with_progress(terminal)?;
-        }
-
         while !self.should_quit {
             if self.mode == AppMode::LoadingRelatedFiles {
                 terminal.draw(|f| self.render_loading(f))?;
@@ -188,6 +283,7 @@ impl App {
             }
 
             self.poll_app_sizes();
+            self.poll_scan_messages();
 
             terminal.draw(|f| self.render(f))?;
 
@@ -201,77 +297,57 @@ impl App {
         Ok(())
     }
 
-    fn draw_scanning(&self, terminal: &mut Terminal<impl ratatui::backend::Backend>) -> Result<()> {
-        terminal.draw(|f| {
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(3),
-                    Constraint::Min(10),
-                    Constraint::Length(3),
-                ])
-                .split(f.area());
-
-            let title = Paragraph::new(Line::from(vec![
-                Span::styled(
-                    " CleanX ",
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::raw("macOS System Cleaner"),
-            ]))
-            .block(Block::default().borders(Borders::BOTTOM));
-            f.render_widget(title, chunks[0]);
-
-            let progress = if self.scan_progress.total_scanners > 0 {
-                (self.scan_progress.scanners_done * 100) / self.scan_progress.total_scanners
-            } else {
-                0
-            };
-
-            let inner_chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Percentage(40),
-                    Constraint::Percentage(20),
-                    Constraint::Percentage(40),
-                ])
-                .split(chunks[1]);
-
-            let title = Paragraph::new(Line::from(vec![
-                Span::styled("Scanning", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw("..."),
-            ]))
-            .alignment(Alignment::Center);
-            f.render_widget(title, inner_chunks[0]);
-
-            let gauge = Gauge::default()
-                .block(Block::default().borders(Borders::ALL))
-                .gauge_style(Style::default().fg(Color::Cyan))
-                .percent(progress as u16)
-                .label(format!(
-                    "{} / {} - {}",
-                    self.scan_progress.scanners_done,
-                    self.scan_progress.total_scanners,
-                    self.scan_progress.current_scanner
-                ));
-            f.render_widget(gauge, inner_chunks[1]);
-
-            let footer = Paragraph::new(Line::from(vec![
-                Span::styled("q", Style::default().fg(Color::Cyan)),
-                Span::raw(" Quit  "),
-            ]))
-            .block(Block::default().borders(Borders::TOP));
-            f.render_widget(footer, chunks[2]);
-        })?;
-        Ok(())
-    }
-
     fn poll_app_sizes(&mut self) {
         if let Some(ref rx) = self.apps_mode.size_receiver {
             while let Ok((idx, size)) = rx.try_recv() {
                 self.apps_mode.app_sizes.insert(idx, size);
+            }
+        }
+    }
+
+    fn poll_scan_messages(&mut self) {
+        let rx_opt = self.scan_receiver.take();
+        if let Some(ref rx) = rx_opt {
+            let mut complete = false;
+            while let Ok(msg) = rx.try_recv() {
+                match msg {
+                    ScanMessage::ScannerStart { name, index, total } => {
+                        self.scan_progress.current_scanner = name;
+                        self.scan_progress.scanners_done = index;
+                        self.scan_progress.total_scanners = total;
+                    }
+                    ScanMessage::ScannerDone { category } => {
+                        if self.report.is_none() {
+                            self.report = Some(ScanReport {
+                                categories: Vec::new(),
+                                total_size: 0,
+                                total_items: 0,
+                                duration: std::time::Duration::from_secs(0),
+                            });
+                        }
+                        if let Some(ref mut report) = self.report {
+                            report.categories.push(category);
+                            if report.categories.len() == 1 {
+                                self.list_state.select(Some(0));
+                            }
+                        }
+                        self.scan_progress.scanners_done += 1;
+                    }
+                    ScanMessage::ScanComplete {
+                        total_size,
+                        total_items,
+                    } => {
+                        if let Some(ref mut report) = self.report {
+                            report.total_size = total_size;
+                            report.total_items = total_items;
+                        }
+                        self.mode = AppMode::Review;
+                        complete = true;
+                    }
+                }
+            }
+            if !complete {
+                self.scan_receiver = rx_opt;
             }
         }
     }
@@ -288,134 +364,6 @@ impl App {
 
         f.render_widget(Clear, area);
         f.render_widget(loading, area);
-    }
-
-    fn scan_with_progress(
-        &mut self,
-        terminal: &mut Terminal<impl ratatui::backend::Backend>,
-    ) -> Result<()> {
-        self.mode = AppMode::Scanning;
-        self.scan_progress.total_scanners = 6;
-        self.scan_progress.scanners_done = 0;
-        self.scan_progress.current_scanner = "Initializing...".to_string();
-
-        self.draw_scanning(terminal)?;
-
-        let scan_config = ScanConfig {
-            min_size: self.config.scan.min_size_bytes,
-            max_depth: self.config.scan.max_depth,
-            excluded_paths: self
-                .config
-                .scan
-                .excluded_paths
-                .iter()
-                .map(|s| s.into())
-                .collect(),
-            follow_symlinks: self.config.scan.follow_symlinks,
-        };
-
-        let mut categories = Vec::new();
-        let scanner_count = 6;
-
-        for i in 0..scanner_count {
-            let (scanner_name, results): (&str, Vec<ScanResult>) = match i {
-                0 => {
-                    use crate::scanner::CacheScanner;
-                    (
-                        "System Caches",
-                        CacheScanner::new().scan(&scan_config).unwrap_or_default(),
-                    )
-                }
-                1 => {
-                    use crate::scanner::LogScanner;
-                    (
-                        "System Logs",
-                        LogScanner::new().scan(&scan_config).unwrap_or_default(),
-                    )
-                }
-                2 => {
-                    use crate::scanner::TrashScanner;
-                    (
-                        "Trash",
-                        TrashScanner::new().scan(&scan_config).unwrap_or_default(),
-                    )
-                }
-                3 => {
-                    use crate::scanner::BrowserCacheScanner;
-                    (
-                        "Browser Caches",
-                        BrowserCacheScanner::new()
-                            .scan(&scan_config)
-                            .unwrap_or_default(),
-                    )
-                }
-                4 => {
-                    use crate::scanner::DevJunkScanner;
-                    (
-                        "Development Junk",
-                        DevJunkScanner::new().scan(&scan_config).unwrap_or_default(),
-                    )
-                }
-                5 => {
-                    use crate::scanner::LargeOldFilesScanner;
-                    (
-                        "Large & Old Files",
-                        LargeOldFilesScanner::new()
-                            .scan(&scan_config)
-                            .unwrap_or_default(),
-                    )
-                }
-                _ => break,
-            };
-
-            self.scan_progress.current_scanner = scanner_name.to_string();
-            self.scan_progress.scanners_done = i;
-            self.draw_scanning(terminal)?;
-
-            let category = match i {
-                0 => crate::plugin::ScannerCategory::System,
-                1 => crate::plugin::ScannerCategory::System,
-                2 => crate::plugin::ScannerCategory::Trash,
-                3 => crate::plugin::ScannerCategory::Browser,
-                4 => crate::plugin::ScannerCategory::Development,
-                5 => crate::plugin::ScannerCategory::System,
-                _ => crate::plugin::ScannerCategory::System,
-            };
-
-            categories.push(CategoryScanResult {
-                scanner_id: format!("scanner_{}", i),
-                name: scanner_name.to_string(),
-                category,
-                icon: String::new(),
-                items: results,
-            });
-
-            self.scan_progress.scanners_done = i + 1;
-            self.draw_scanning(terminal)?;
-        }
-
-        let total_size: u64 = categories
-            .iter()
-            .flat_map(|c| c.items.iter())
-            .map(|i| i.size)
-            .sum();
-        let total_items: usize = categories.iter().map(|c| c.items.len()).sum();
-
-        self.report = Some(ScanReport {
-            categories,
-            total_size,
-            total_items,
-            duration: std::time::Duration::from_secs(0),
-        });
-        self.mode = AppMode::Review;
-
-        if let Some(ref report) = self.report {
-            if !report.categories.is_empty() {
-                self.list_state.select(Some(0));
-            }
-        }
-
-        Ok(())
     }
 
     fn render_scanning(&self, f: &mut Frame) {
