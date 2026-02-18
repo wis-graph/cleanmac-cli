@@ -613,7 +613,12 @@ impl App {
                     scanner.enabled = false;
                 }
             }
-            KeyCode::Enter => {
+            KeyCode::Enter | KeyCode::Tab => {
+                if self.report.is_some() && !self.report.as_ref().unwrap().categories.is_empty() {
+                    self.mode = AppMode::Review;
+                }
+            }
+            KeyCode::Char('r') => {
                 self.start_scan();
             }
             _ => {}
@@ -640,7 +645,7 @@ impl App {
                 self.prev_mode = Some(self.mode);
                 self.mode = AppMode::Help;
             }
-            KeyCode::Esc => {
+            KeyCode::Esc | KeyCode::Tab => {
                 self.mode = AppMode::CategorySelect;
             }
             KeyCode::Char('r') => {
@@ -1356,19 +1361,16 @@ impl App {
             Span::raw(" Cat  "),
             Span::styled("s", Style::default().fg(Color::Cyan)),
             Span::raw(" Sort  "),
+            Span::styled("Tab", Style::default().fg(Color::Cyan)),
+            Span::raw(" Cats  "),
             Span::styled("Space", Style::default().fg(Color::Cyan)),
             Span::raw(" Select  "),
             Span::styled("a", Style::default().fg(Color::Cyan)),
             Span::raw(" All  "),
-            Span::styled("n", Style::default().fg(Color::Cyan)),
-            Span::raw(" None  "),
             Span::styled("Enter", Style::default().fg(Color::Cyan)),
             Span::raw(" Clean  "),
             Span::styled("?", Style::default().fg(Color::Cyan)),
-            Span::raw(" Help  "),
-            Span::styled("q", Style::default().fg(Color::Cyan)),
-            Span::raw(" Quit  |  "),
-            Span::styled(status, Style::default().fg(Color::Gray)),
+            Span::raw(" Help"),
         ]))
         .block(Block::default().borders(Borders::TOP));
 
@@ -1704,19 +1706,27 @@ impl App {
             Span::raw(" Nav  "),
             Span::styled("Space", Style::default().fg(Color::Cyan)),
             Span::raw(" Toggle  "),
+            Span::styled("r", Style::default().fg(Color::Cyan)),
+            Span::raw(" Scan  "),
             Span::styled("a", Style::default().fg(Color::Cyan)),
             Span::raw(" All  "),
             Span::styled("n", Style::default().fg(Color::Cyan)),
             Span::raw(" None  "),
-            Span::styled("Enter", Style::default().fg(Color::Cyan)),
-            Span::raw(if has_cached {
-                " Add/Refresh "
-            } else {
-                " Scan "
-            }),
-            Span::styled("q", Style::default().fg(Color::Cyan)),
-            Span::raw(" Quit"),
         ];
+
+        if has_cached
+            && self
+                .report
+                .as_ref()
+                .map(|r| !r.categories.is_empty())
+                .unwrap_or(false)
+        {
+            footer_spans.push(Span::styled("Tab", Style::default().fg(Color::Cyan)));
+            footer_spans.push(Span::raw(" View  "));
+        }
+
+        footer_spans.push(Span::styled("q", Style::default().fg(Color::Cyan)));
+        footer_spans.push(Span::raw(" Quit"));
 
         if has_cached {
             footer_spans.push(Span::raw("  "));
