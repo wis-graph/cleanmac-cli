@@ -174,6 +174,11 @@ impl App {
                     Box::new(crate::scanner::MailAttachmentsScanner::new()) as Box<dyn Scanner>,
                     crate::plugin::ScannerCategory::System,
                 ),
+                (
+                    "Photo Junk",
+                    Box::new(crate::scanner::PhotoJunkScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::System,
+                ),
             ];
 
             let total = scanners.len();
@@ -225,7 +230,7 @@ impl App {
                 current_scanner: "Initializing...".to_string(),
                 current_path: None,
                 scanners_done: 0,
-                total_scanners: 7,
+                total_scanners: 8,
                 start_time: None,
             },
             clean_result: None,
@@ -300,6 +305,11 @@ impl App {
                 (
                     "Mail Attachments",
                     Box::new(crate::scanner::MailAttachmentsScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::System,
+                ),
+                (
+                    "Photo Junk",
+                    Box::new(crate::scanner::PhotoJunkScanner::new()) as Box<dyn Scanner>,
                     crate::plugin::ScannerCategory::System,
                 ),
             ];
