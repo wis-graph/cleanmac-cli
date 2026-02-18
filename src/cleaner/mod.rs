@@ -4,6 +4,7 @@ use crate::safety::SafetyChecker;
 use anyhow::Result;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 use std::time::{Duration, Instant};
 
 pub struct DefaultCleaner {
@@ -26,6 +27,21 @@ impl Cleaner for DefaultCleaner {
         let mut result = CleanResult::new();
 
         for item in items {
+            if let Some(command) = item.metadata.get("command") {
+                if item.metadata.get("scanner_id").map(|s| s.as_str()) == Some("maintenance") {
+                    match self.execute_command(command, config.dry_run) {
+                        Ok(()) => {
+                            result.success_count += 1;
+                        }
+                        Err(e) => {
+                            result.failed_items.push((item.path.clone(), e.to_string()));
+                            result.failed_count += 1;
+                        }
+                    }
+                    continue;
+                }
+            }
+
             if !self.can_clean(item) {
                 result
                     .failed_items
@@ -74,6 +90,23 @@ impl DefaultCleaner {
         }
 
         println!("Deleted: {}", path.display());
+        Ok(())
+    }
+
+    fn execute_command(&self, command: &str, dry_run: bool) -> Result<()> {
+        if dry_run {
+            println!("[DRY-RUN] Would execute: {}", command);
+            return Ok(());
+        }
+
+        let output = Command::new("sh").arg("-c").arg(command).output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Command failed: {}", stderr);
+        }
+
+        println!("Executed: {}", command);
         Ok(())
     }
 }

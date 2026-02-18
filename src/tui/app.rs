@@ -217,6 +217,11 @@ impl App {
                 name: "Privacy".into(),
                 enabled: false,
             },
+            ScannerInfo {
+                id: "maintenance".into(),
+                name: "Maintenance".into(),
+                enabled: false,
+            },
         ];
 
         let mut list_state = ListState::default();
@@ -374,6 +379,11 @@ impl App {
                 "privacy".into(),
                 Box::new(crate::scanner::PrivacyScanner::new()) as Box<dyn Scanner>,
                 crate::plugin::ScannerCategory::Browser,
+            ),
+            (
+                "maintenance".into(),
+                Box::new(crate::scanner::MaintenanceScanner::new()) as Box<dyn Scanner>,
+                crate::plugin::ScannerCategory::System,
             ),
         ];
 
@@ -1323,10 +1333,34 @@ impl App {
 
     fn format_item_detail(&self, item: &ScanResult) -> String {
         let (safety_str, safety_desc) = match item.safety_level {
-            SafetyLevel::Safe => ("Safe", "Can be safely deleted"),
-            SafetyLevel::Caution => ("Caution", "May affect some applications"),
-            SafetyLevel::Protected => ("Protected", "Cannot be deleted"),
+            SafetyLevel::Safe => ("Safe", "Can be safely executed"),
+            SafetyLevel::Caution => ("Caution", "May affect system behavior"),
+            SafetyLevel::Protected => ("Protected", "Cannot be executed"),
         };
+
+        if item.metadata.get("scanner_id").map(|s| s.as_str()) == Some("maintenance") {
+            let description = item
+                .metadata
+                .get("description")
+                .cloned()
+                .unwrap_or_default();
+            let command = item.metadata.get("command").cloned().unwrap_or_default();
+            let requires_sudo = item
+                .metadata
+                .get("requires_sudo")
+                .map(|s| s == "true")
+                .unwrap_or(false);
+
+            return format!(
+                "Task:\n  {}\n\nDescription:\n  {}\n\nCommand:\n  {}\n\nRequires Sudo:\n  {}\n\nSafety Level:\n  {}\n  ({})",
+                item.name,
+                description,
+                command,
+                if requires_sudo { "Yes" } else { "No" },
+                safety_str,
+                safety_desc
+            );
+        }
 
         format!(
             "Path:\n  {}\n\nSize:\n  {}\n\nFiles:\n  {}\n\nLast Accessed:\n  {}\n\nLast Modified:\n  {}\n\nSafety Level:\n  {}\n  ({})",
