@@ -21,6 +21,7 @@ thiserror = "2"
 chrono = "0.4"
 byte-unit = "5"
 plist = "1"
+sha2 = "0.10"
 
 [profile.release]
 lto = true

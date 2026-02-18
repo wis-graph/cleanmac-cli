@@ -1,6 +1,7 @@
 pub mod browser;
 pub mod caches;
 pub mod dev;
+pub mod duplicates;
 pub mod large_files;
 pub mod logs;
 pub mod mail;
@@ -11,6 +12,7 @@ pub mod trash;
 pub use browser::BrowserCacheScanner;
 pub use caches::CacheScanner;
 pub use dev::DevJunkScanner;
+pub use duplicates::DuplicatesScanner;
 pub use large_files::LargeOldFilesScanner;
 pub use logs::LogScanner;
 pub use mail::MailAttachmentsScanner;

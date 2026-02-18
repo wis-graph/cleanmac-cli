@@ -207,6 +207,11 @@ impl App {
                 name: "Music & Podcasts".into(),
                 enabled: true,
             },
+            ScannerInfo {
+                id: "duplicates".into(),
+                name: "Duplicates".into(),
+                enabled: false,
+            },
         ];
 
         let mut list_state = ListState::default();
@@ -353,6 +358,11 @@ impl App {
             (
                 "music_junk".into(),
                 Box::new(crate::scanner::MusicJunkScanner::new()) as Box<dyn Scanner>,
+                crate::plugin::ScannerCategory::System,
+            ),
+            (
+                "duplicates".into(),
+                Box::new(crate::scanner::DuplicatesScanner::new()) as Box<dyn Scanner>,
                 crate::plugin::ScannerCategory::System,
             ),
         ];
