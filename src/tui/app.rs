@@ -27,13 +27,25 @@ enum ScanMessage {
     ScanningPath {
         path: String,
     },
+    ItemFound {
+        scanner_id: String,
+        item: ScanResult,
+    },
     ScannerDone {
-        category: CategoryScanResult,
+        scanner_id: String,
+        name: String,
+        category: crate::plugin::ScannerCategory,
     },
     ScanComplete {
         total_size: u64,
         total_items: usize,
     },
+}
+
+struct ScannerInfo {
+    id: String,
+    name: String,
+    enabled: bool,
 }
 
 pub struct App {
@@ -52,10 +64,12 @@ pub struct App {
     clean_result: Option<CleanResultDisplay>,
     apps_mode: AppsModeState,
     scan_receiver: Option<Receiver<ScanMessage>>,
+    available_scanners: Vec<ScannerInfo>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AppMode {
+    CategorySelect,
     Review,
     ConfirmClean,
     ResultDisplay,
@@ -117,102 +131,51 @@ struct CleanResultDisplay {
 
 impl App {
     pub fn new(config: Config) -> Self {
-        let (tx, rx) = mpsc::channel();
+        let available_scanners = vec![
+            ScannerInfo {
+                id: "system_caches".into(),
+                name: "System Caches".into(),
+                enabled: true,
+            },
+            ScannerInfo {
+                id: "system_logs".into(),
+                name: "System Logs".into(),
+                enabled: true,
+            },
+            ScannerInfo {
+                id: "trash".into(),
+                name: "Trash".into(),
+                enabled: true,
+            },
+            ScannerInfo {
+                id: "browser_caches".into(),
+                name: "Browser Caches".into(),
+                enabled: true,
+            },
+            ScannerInfo {
+                id: "dev_junk".into(),
+                name: "Development Junk".into(),
+                enabled: true,
+            },
+            ScannerInfo {
+                id: "large_old_files".into(),
+                name: "Large & Old Files".into(),
+                enabled: true,
+            },
+            ScannerInfo {
+                id: "mail_attachments".into(),
+                name: "Mail Attachments".into(),
+                enabled: true,
+            },
+            ScannerInfo {
+                id: "photo_junk".into(),
+                name: "Photo Junk".into(),
+                enabled: true,
+            },
+        ];
 
-        let progress_tx = tx.clone();
-        let scan_config = ScanConfig {
-            min_size: config.scan.min_size_bytes,
-            max_depth: config.scan.max_depth,
-            excluded_paths: config
-                .scan
-                .excluded_paths
-                .iter()
-                .map(|s| s.into())
-                .collect(),
-            follow_symlinks: config.scan.follow_symlinks,
-            progress_callback: Some(std::sync::Arc::new(move |path: &str| {
-                let _ = progress_tx.send(ScanMessage::ScanningPath {
-                    path: path.to_string(),
-                });
-            })),
-        };
-
-        thread::spawn(move || {
-            let scanners: Vec<(&str, Box<dyn Scanner>, crate::plugin::ScannerCategory)> = vec![
-                (
-                    "System Caches",
-                    Box::new(crate::scanner::CacheScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::System,
-                ),
-                (
-                    "System Logs",
-                    Box::new(crate::scanner::LogScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::System,
-                ),
-                (
-                    "Trash",
-                    Box::new(crate::scanner::TrashScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::Trash,
-                ),
-                (
-                    "Browser Caches",
-                    Box::new(crate::scanner::BrowserCacheScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::Browser,
-                ),
-                (
-                    "Development Junk",
-                    Box::new(crate::scanner::DevJunkScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::Development,
-                ),
-                (
-                    "Large & Old Files",
-                    Box::new(crate::scanner::LargeOldFilesScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::System,
-                ),
-                (
-                    "Mail Attachments",
-                    Box::new(crate::scanner::MailAttachmentsScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::System,
-                ),
-                (
-                    "Photo Junk",
-                    Box::new(crate::scanner::PhotoJunkScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::System,
-                ),
-            ];
-
-            let total = scanners.len();
-            let mut total_size: u64 = 0;
-            let mut total_items: usize = 0;
-
-            for (idx, (name, scanner, category)) in scanners.into_iter().enumerate() {
-                let _ = tx.send(ScanMessage::ScannerStart {
-                    name: name.to_string(),
-                    index: idx,
-                    total,
-                });
-
-                let results = scanner.scan(&scan_config).unwrap_or_default();
-
-                let cat = CategoryScanResult {
-                    scanner_id: scanner.id().to_string(),
-                    name: name.to_string(),
-                    category,
-                    icon: String::new(),
-                    items: results,
-                };
-
-                total_size += cat.total_size();
-                total_items += cat.items.len();
-
-                let _ = tx.send(ScanMessage::ScannerDone { category: cat });
-            }
-
-            let _ = tx.send(ScanMessage::ScanComplete {
-                total_size,
-                total_items,
-            });
-        });
+        let mut list_state = ListState::default();
+        list_state.select(Some(0));
 
         Self {
             config,
@@ -221,25 +184,31 @@ impl App {
             report: None,
             selected_category: 0,
             selected_items: HashSet::new(),
-            list_state: ListState::default(),
-            mode: AppMode::Review,
+            list_state,
+            mode: AppMode::CategorySelect,
             prev_mode: None,
             should_quit: false,
             message: None,
-            scan_progress: ScanProgress {
-                current_scanner: "Initializing...".to_string(),
-                current_path: None,
-                scanners_done: 0,
-                total_scanners: 8,
-                start_time: None,
-            },
+            scan_progress: ScanProgress::default(),
             clean_result: None,
             apps_mode: AppsModeState::default(),
-            scan_receiver: Some(rx),
+            scan_receiver: None,
+            available_scanners,
         }
     }
 
     fn start_scan(&mut self) {
+        let enabled_ids: Vec<String> = self
+            .available_scanners
+            .iter()
+            .filter(|s| s.enabled)
+            .map(|s| s.id.clone())
+            .collect();
+
+        if enabled_ids.is_empty() {
+            return;
+        }
+
         let (tx, rx) = mpsc::channel();
 
         let progress_tx = tx.clone();
@@ -261,84 +230,101 @@ impl App {
             })),
         };
 
+        self.report = Some(ScanReport {
+            categories: Vec::new(),
+            total_size: 0,
+            total_items: 0,
+            duration: std::time::Duration::from_secs(0),
+        });
         self.scan_progress = ScanProgress {
             current_scanner: "Initializing...".to_string(),
             current_path: None,
             scanners_done: 0,
-            total_scanners: 6,
+            total_scanners: enabled_ids.len(),
             start_time: None,
         };
         self.scan_receiver = Some(rx);
+        self.mode = AppMode::Review;
+
+        let all_scanners: Vec<(String, Box<dyn Scanner>, crate::plugin::ScannerCategory)> = vec![
+            (
+                "system_caches".into(),
+                Box::new(crate::scanner::CacheScanner::new()) as Box<dyn Scanner>,
+                crate::plugin::ScannerCategory::System,
+            ),
+            (
+                "system_logs".into(),
+                Box::new(crate::scanner::LogScanner::new()) as Box<dyn Scanner>,
+                crate::plugin::ScannerCategory::System,
+            ),
+            (
+                "trash".into(),
+                Box::new(crate::scanner::TrashScanner::new()) as Box<dyn Scanner>,
+                crate::plugin::ScannerCategory::Trash,
+            ),
+            (
+                "browser_caches".into(),
+                Box::new(crate::scanner::BrowserCacheScanner::new()) as Box<dyn Scanner>,
+                crate::plugin::ScannerCategory::Browser,
+            ),
+            (
+                "dev_junk".into(),
+                Box::new(crate::scanner::DevJunkScanner::new()) as Box<dyn Scanner>,
+                crate::plugin::ScannerCategory::Development,
+            ),
+            (
+                "large_old_files".into(),
+                Box::new(crate::scanner::LargeOldFilesScanner::new()) as Box<dyn Scanner>,
+                crate::plugin::ScannerCategory::System,
+            ),
+            (
+                "mail_attachments".into(),
+                Box::new(crate::scanner::MailAttachmentsScanner::new()) as Box<dyn Scanner>,
+                crate::plugin::ScannerCategory::System,
+            ),
+            (
+                "photo_junk".into(),
+                Box::new(crate::scanner::PhotoJunkScanner::new()) as Box<dyn Scanner>,
+                crate::plugin::ScannerCategory::System,
+            ),
+        ];
 
         thread::spawn(move || {
-            let scanners: Vec<(&str, Box<dyn Scanner>, crate::plugin::ScannerCategory)> = vec![
-                (
-                    "System Caches",
-                    Box::new(crate::scanner::CacheScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::System,
-                ),
-                (
-                    "System Logs",
-                    Box::new(crate::scanner::LogScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::System,
-                ),
-                (
-                    "Trash",
-                    Box::new(crate::scanner::TrashScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::Trash,
-                ),
-                (
-                    "Browser Caches",
-                    Box::new(crate::scanner::BrowserCacheScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::Browser,
-                ),
-                (
-                    "Development Junk",
-                    Box::new(crate::scanner::DevJunkScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::Development,
-                ),
-                (
-                    "Large & Old Files",
-                    Box::new(crate::scanner::LargeOldFilesScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::System,
-                ),
-                (
-                    "Mail Attachments",
-                    Box::new(crate::scanner::MailAttachmentsScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::System,
-                ),
-                (
-                    "Photo Junk",
-                    Box::new(crate::scanner::PhotoJunkScanner::new()) as Box<dyn Scanner>,
-                    crate::plugin::ScannerCategory::System,
-                ),
-            ];
+            let scanners: Vec<_> = all_scanners
+                .into_iter()
+                .filter(|(id, _, _)| enabled_ids.contains(id))
+                .collect();
 
             let total = scanners.len();
             let mut total_size: u64 = 0;
             let mut total_items: usize = 0;
 
-            for (idx, (name, scanner, category)) in scanners.into_iter().enumerate() {
+            for (idx, (id, scanner, category)) in scanners.into_iter().enumerate() {
+                let name = scanner.name().to_string();
+                let scanner_id = scanner.id().to_string();
+
                 let _ = tx.send(ScanMessage::ScannerStart {
-                    name: name.to_string(),
+                    name: name.clone(),
                     index: idx,
                     total,
                 });
 
                 let results = scanner.scan(&scan_config).unwrap_or_default();
+                total_items += results.len();
 
-                let cat = CategoryScanResult {
-                    scanner_id: scanner.id().to_string(),
-                    name: name.to_string(),
+                for item in results {
+                    total_size += item.size;
+                    let _ = tx.send(ScanMessage::ItemFound {
+                        scanner_id: scanner_id.clone(),
+                        item,
+                    });
+                }
+
+                let _ = tx.send(ScanMessage::ScannerDone {
+                    scanner_id,
+                    name,
                     category,
-                    icon: String::new(),
-                    items: results,
-                };
-
-                total_size += cat.total_size();
-                total_items += cat.items.len();
-
-                let _ = tx.send(ScanMessage::ScannerDone { category: cat });
+                });
             }
 
             let _ = tx.send(ScanMessage::ScanComplete {
@@ -400,6 +386,7 @@ impl App {
                 ..Default::default()
             },
             scan_receiver: None,
+            available_scanners: Vec::new(),
         };
 
         if !app.apps_mode.apps.is_empty() {
@@ -453,19 +440,42 @@ impl App {
                     ScanMessage::ScanningPath { path } => {
                         self.scan_progress.current_path = Some(path);
                     }
-                    ScanMessage::ScannerDone { category } => {
-                        if self.report.is_none() {
-                            self.report = Some(ScanReport {
-                                categories: Vec::new(),
-                                total_size: 0,
-                                total_items: 0,
-                                duration: std::time::Duration::from_secs(0),
-                            });
-                        }
+                    ScanMessage::ItemFound { scanner_id, item } => {
                         if let Some(ref mut report) = self.report {
-                            report.categories.push(category);
-                            if report.categories.len() == 1 {
-                                self.list_state.select(Some(0));
+                            if let Some(cat) = report
+                                .categories
+                                .iter_mut()
+                                .find(|c| c.scanner_id == scanner_id)
+                            {
+                                cat.items.push(item);
+                            } else {
+                                let mut new_cat = CategoryScanResult {
+                                    scanner_id: scanner_id.clone(),
+                                    name: scanner_id.clone(),
+                                    category: crate::plugin::ScannerCategory::System,
+                                    icon: String::new(),
+                                    items: vec![item],
+                                };
+                                report.categories.push(new_cat);
+                                if report.categories.len() == 1 {
+                                    self.list_state.select(Some(0));
+                                }
+                            }
+                        }
+                    }
+                    ScanMessage::ScannerDone {
+                        scanner_id,
+                        name,
+                        category,
+                    } => {
+                        if let Some(ref mut report) = self.report {
+                            if let Some(cat) = report
+                                .categories
+                                .iter_mut()
+                                .find(|c| c.scanner_id == scanner_id)
+                            {
+                                cat.name = name;
+                                cat.category = category;
                             }
                         }
                         self.scan_progress.scanners_done += 1;
@@ -479,7 +489,6 @@ impl App {
                             report.total_size = total_size;
                             report.total_items = total_items;
                         }
-                        self.mode = AppMode::Review;
                         complete = true;
                     }
                 }
@@ -506,6 +515,7 @@ impl App {
 
     fn handle_key(&mut self, code: KeyCode, modifiers: KeyModifiers) -> Result<()> {
         match self.mode {
+            AppMode::CategorySelect => self.handle_category_select_key(code),
             AppMode::Review => self.handle_review_key(code, modifiers),
             AppMode::ConfirmClean => self.handle_confirm_key(code),
             AppMode::ResultDisplay => self.handle_result_key(code),
@@ -515,6 +525,49 @@ impl App {
             AppMode::UninstallReview => self.handle_uninstall_review_key(code),
             AppMode::UninstallResult => self.handle_uninstall_result_key(code),
         }
+    }
+
+    fn handle_category_select_key(&mut self, code: KeyCode) -> Result<()> {
+        match code {
+            KeyCode::Char('q') => self.should_quit = true,
+            KeyCode::Up => {
+                if let Some(current) = self.list_state.selected() {
+                    if current > 0 {
+                        self.list_state.select(Some(current - 1));
+                    }
+                }
+            }
+            KeyCode::Down => {
+                let max = self.available_scanners.len().saturating_sub(1);
+                if let Some(current) = self.list_state.selected() {
+                    if current < max {
+                        self.list_state.select(Some(current + 1));
+                    }
+                }
+            }
+            KeyCode::Char(' ') => {
+                if let Some(idx) = self.list_state.selected() {
+                    if let Some(scanner) = self.available_scanners.get_mut(idx) {
+                        scanner.enabled = !scanner.enabled;
+                    }
+                }
+            }
+            KeyCode::Char('a') => {
+                for scanner in &mut self.available_scanners {
+                    scanner.enabled = true;
+                }
+            }
+            KeyCode::Char('n') => {
+                for scanner in &mut self.available_scanners {
+                    scanner.enabled = false;
+                }
+            }
+            KeyCode::Enter => {
+                self.start_scan();
+            }
+            _ => {}
+        }
+        Ok(())
     }
 
     fn handle_review_key(&mut self, code: KeyCode, _modifiers: KeyModifiers) -> Result<()> {
@@ -848,6 +901,10 @@ impl App {
 
     fn render(&mut self, f: &mut Frame) {
         match self.mode {
+            AppMode::CategorySelect => {
+                self.render_category_select(f);
+                return;
+            }
             AppMode::AppList => {
                 self.render_app_list(f);
                 return;
@@ -1423,6 +1480,83 @@ impl App {
 
         f.render_widget(Clear, area);
         f.render_widget(paragraph, area);
+    }
+
+    fn render_category_select(&mut self, f: &mut Frame) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(10),
+                Constraint::Length(3),
+            ])
+            .split(f.area());
+
+        let title = Paragraph::new(Line::from(vec![
+            Span::styled(
+                " CleanX ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Select Categories to Scan"),
+        ]))
+        .block(Block::default().borders(Borders::BOTTOM));
+        f.render_widget(title, chunks[0]);
+
+        let enabled_count = self.available_scanners.iter().filter(|s| s.enabled).count();
+        let items: Vec<ListItem> = self
+            .available_scanners
+            .iter()
+            .map(|scanner| {
+                let check = if scanner.enabled { "[x]" } else { "[ ]" };
+                let style = if scanner.enabled {
+                    Style::default().fg(Color::Green)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
+                ListItem::new(Line::from(vec![
+                    Span::styled(check, Style::default().fg(Color::Cyan)),
+                    Span::raw(" "),
+                    Span::styled(&scanner.name, style),
+                ]))
+            })
+            .collect();
+
+        let list = List::new(items)
+            .block(
+                Block::default()
+                    .title(format!(
+                        " Categories ({}/{} enabled) ",
+                        enabled_count,
+                        self.available_scanners.len()
+                    ))
+                    .borders(Borders::NONE),
+            )
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol("> ");
+        f.render_stateful_widget(list, chunks[1], &mut self.list_state);
+
+        let footer = Paragraph::new(Line::from(vec![
+            Span::styled("↑↓", Style::default().fg(Color::Cyan)),
+            Span::raw(" Navigate  "),
+            Span::styled("Space", Style::default().fg(Color::Cyan)),
+            Span::raw(" Toggle  "),
+            Span::styled("a", Style::default().fg(Color::Cyan)),
+            Span::raw(" All  "),
+            Span::styled("n", Style::default().fg(Color::Cyan)),
+            Span::raw(" None  "),
+            Span::styled("Enter", Style::default().fg(Color::Cyan)),
+            Span::raw(" Scan  "),
+            Span::styled("q", Style::default().fg(Color::Cyan)),
+            Span::raw(" Quit"),
+        ]))
+        .block(Block::default().borders(Borders::TOP));
+        f.render_widget(footer, chunks[2]);
     }
 
     fn render_app_list(&mut self, f: &mut Frame) {
