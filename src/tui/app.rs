@@ -235,12 +235,34 @@ impl App {
             })),
         };
 
-        self.report = Some(ScanReport {
-            categories: Vec::new(),
-            total_size: 0,
-            total_items: 0,
-            duration: std::time::Duration::from_secs(0),
-        });
+        if let Some(ref mut report) = self.report {
+            let removed_size: u64 = report
+                .categories
+                .iter()
+                .filter(|c| enabled_ids.contains(&c.scanner_id))
+                .map(|c| c.total_size())
+                .sum();
+            let removed_items: usize = report
+                .categories
+                .iter()
+                .filter(|c| enabled_ids.contains(&c.scanner_id))
+                .map(|c| c.items.len())
+                .sum();
+
+            report
+                .categories
+                .retain(|c| !enabled_ids.contains(&c.scanner_id));
+            report.total_size = report.total_size.saturating_sub(removed_size);
+            report.total_items = report.total_items.saturating_sub(removed_items);
+        } else {
+            self.report = Some(ScanReport {
+                categories: Vec::new(),
+                total_size: 0,
+                total_items: 0,
+                duration: std::time::Duration::from_secs(0),
+            });
+        }
+
         self.scan_progress = ScanProgress {
             current_scanner: "Initializing...".to_string(),
             current_path: None,
@@ -585,6 +607,9 @@ impl App {
             KeyCode::Char('?') => {
                 self.prev_mode = Some(self.mode);
                 self.mode = AppMode::Help;
+            }
+            KeyCode::Esc => {
+                self.mode = AppMode::CategorySelect;
             }
             KeyCode::Char('r') => {
                 self.selected_items.clear();
@@ -1489,6 +1514,10 @@ impl App {
             ])
             .split(f.area());
 
+        let has_cached = self.report.is_some();
+        let cached_size = self.report.as_ref().map(|r| r.total_size).unwrap_or(0);
+        let cached_items = self.report.as_ref().map(|r| r.total_items).unwrap_or(0);
+
         let title = Paragraph::new(Line::from(vec![
             Span::styled(
                 " CleanX ",
@@ -1497,9 +1526,27 @@ impl App {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw("Select Categories to Scan"),
+            if has_cached {
+                Span::styled(
+                    format!(
+                        " (Cached: {} / {} items)",
+                        format_size(cached_size),
+                        cached_items
+                    ),
+                    Style::default().fg(Color::DarkGray),
+                )
+            } else {
+                Span::raw("")
+            },
         ]))
         .block(Block::default().borders(Borders::BOTTOM));
         f.render_widget(title, chunks[0]);
+
+        let scanned_ids: std::collections::HashSet<String> = self
+            .report
+            .as_ref()
+            .map(|r| r.categories.iter().map(|c| c.scanner_id.clone()).collect())
+            .unwrap_or_default();
 
         let enabled_count = self.available_scanners.iter().filter(|s| s.enabled).count();
         let items: Vec<ListItem> = self
@@ -1507,15 +1554,39 @@ impl App {
             .iter()
             .map(|scanner| {
                 let check = if scanner.enabled { "[x]" } else { "[ ]" };
+                let is_scanned = scanned_ids.contains(&scanner.id);
+                let scanned_cat = self
+                    .report
+                    .as_ref()
+                    .and_then(|r| r.categories.iter().find(|c| c.scanner_id == scanner.id));
+
                 let style = if scanner.enabled {
                     Style::default().fg(Color::Green)
                 } else {
                     Style::default().fg(Color::DarkGray)
                 };
+
+                let scan_indicator = if let Some(cat) = scanned_cat {
+                    Span::styled(
+                        format!(" ({})", format_size(cat.total_size())),
+                        Style::default().fg(Color::Yellow),
+                    )
+                } else {
+                    Span::raw("")
+                };
+
+                let cached_mark = if is_scanned {
+                    Span::styled(" ✓", Style::default().fg(Color::Cyan))
+                } else {
+                    Span::raw("")
+                };
+
                 ListItem::new(Line::from(vec![
                     Span::styled(check, Style::default().fg(Color::Cyan)),
                     Span::raw(" "),
                     Span::styled(&scanner.name, style),
+                    scan_indicator,
+                    cached_mark,
                 ]))
             })
             .collect();
@@ -1538,9 +1609,9 @@ impl App {
             .highlight_symbol("> ");
         f.render_stateful_widget(list, chunks[1], &mut self.list_state);
 
-        let footer = Paragraph::new(Line::from(vec![
+        let mut footer_spans = vec![
             Span::styled("↑↓", Style::default().fg(Color::Cyan)),
-            Span::raw(" Navigate  "),
+            Span::raw(" Nav  "),
             Span::styled("Space", Style::default().fg(Color::Cyan)),
             Span::raw(" Toggle  "),
             Span::styled("a", Style::default().fg(Color::Cyan)),
@@ -1548,11 +1619,25 @@ impl App {
             Span::styled("n", Style::default().fg(Color::Cyan)),
             Span::raw(" None  "),
             Span::styled("Enter", Style::default().fg(Color::Cyan)),
-            Span::raw(" Scan  "),
+            Span::raw(if has_cached {
+                " Add/Refresh "
+            } else {
+                " Scan "
+            }),
             Span::styled("q", Style::default().fg(Color::Cyan)),
             Span::raw(" Quit"),
-        ]))
-        .block(Block::default().borders(Borders::TOP));
+        ];
+
+        if has_cached {
+            footer_spans.push(Span::raw("  "));
+            footer_spans.push(Span::styled(
+                format!("| {} cached", format_size(cached_size)),
+                Style::default().fg(Color::Green),
+            ));
+        }
+
+        let footer =
+            Paragraph::new(Line::from(footer_spans)).block(Block::default().borders(Borders::TOP));
         f.render_widget(footer, chunks[2]);
     }
 
