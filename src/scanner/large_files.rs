@@ -91,6 +91,7 @@ impl Scanner for LargeOldFilesScanner {
             10
         };
 
+        let mut count = 0;
         for entry in WalkDir::new(&self.home)
             .max_depth(max_depth)
             .into_iter()
@@ -110,6 +111,11 @@ impl Scanner for LargeOldFilesScanner {
             .filter(|e| e.file_type().is_file())
         {
             let path = entry.path();
+            count += 1;
+
+            if count % 100 == 0 {
+                config.report_progress(&path.display().to_string());
+            }
 
             let metadata = match path.metadata() {
                 Ok(m) => m,

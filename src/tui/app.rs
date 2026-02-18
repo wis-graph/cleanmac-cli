@@ -24,6 +24,9 @@ enum ScanMessage {
         index: usize,
         total: usize,
     },
+    ScanningPath {
+        path: String,
+    },
     ScannerDone {
         category: CategoryScanResult,
     },
@@ -98,6 +101,7 @@ struct UninstallResultDisplay {
 #[derive(Debug, Clone, Default)]
 struct ScanProgress {
     current_scanner: String,
+    current_path: Option<String>,
     scanners_done: usize,
     total_scanners: usize,
     start_time: Option<Instant>,
@@ -115,6 +119,7 @@ impl App {
     pub fn new(config: Config) -> Self {
         let (tx, rx) = mpsc::channel();
 
+        let progress_tx = tx.clone();
         let scan_config = ScanConfig {
             min_size: config.scan.min_size_bytes,
             max_depth: config.scan.max_depth,
@@ -125,6 +130,11 @@ impl App {
                 .map(|s| s.into())
                 .collect(),
             follow_symlinks: config.scan.follow_symlinks,
+            progress_callback: Some(std::sync::Arc::new(move |path: &str| {
+                let _ = progress_tx.send(ScanMessage::ScanningPath {
+                    path: path.to_string(),
+                });
+            })),
         };
 
         thread::spawn(move || {
@@ -208,6 +218,7 @@ impl App {
             message: None,
             scan_progress: ScanProgress {
                 current_scanner: "Initializing...".to_string(),
+                current_path: None,
                 scanners_done: 0,
                 total_scanners: 6,
                 start_time: None,
@@ -221,6 +232,7 @@ impl App {
     fn start_scan(&mut self) {
         let (tx, rx) = mpsc::channel();
 
+        let progress_tx = tx.clone();
         let scan_config = ScanConfig {
             min_size: self.config.scan.min_size_bytes,
             max_depth: self.config.scan.max_depth,
@@ -232,10 +244,16 @@ impl App {
                 .map(|s| s.into())
                 .collect(),
             follow_symlinks: self.config.scan.follow_symlinks,
+            progress_callback: Some(std::sync::Arc::new(move |path: &str| {
+                let _ = progress_tx.send(ScanMessage::ScanningPath {
+                    path: path.to_string(),
+                });
+            })),
         };
 
         self.scan_progress = ScanProgress {
             current_scanner: "Initializing...".to_string(),
+            current_path: None,
             scanners_done: 0,
             total_scanners: 6,
             start_time: None,
@@ -412,6 +430,9 @@ impl App {
                         self.scan_progress.scanners_done = index;
                         self.scan_progress.total_scanners = total;
                     }
+                    ScanMessage::ScanningPath { path } => {
+                        self.scan_progress.current_path = Some(path);
+                    }
                     ScanMessage::ScannerDone { category } => {
                         if self.report.is_none() {
                             self.report = Some(ScanReport {
@@ -428,6 +449,7 @@ impl App {
                             }
                         }
                         self.scan_progress.scanners_done += 1;
+                        self.scan_progress.current_path = None;
                     }
                     ScanMessage::ScanComplete {
                         total_size,
@@ -821,10 +843,13 @@ impl App {
             _ => {}
         }
 
+        let is_scanning = self.scan_receiver.is_some();
+        let header_height = if is_scanning { 4 } else { 3 };
+
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),
+                Constraint::Length(header_height),
                 Constraint::Min(10),
                 Constraint::Length(3),
             ])
@@ -866,28 +891,68 @@ impl App {
             String::new()
         };
 
-        let header = Paragraph::new(Line::from(vec![
-            Span::styled(
-                " CleanX ",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("System Cleaner"),
-            Span::raw("   "),
-            Span::styled(
-                format!(
-                    "Total: {} | Selected: {}",
-                    format_size(total_size),
-                    format_size(selected_size)
-                ),
-                Style::default().fg(Color::Green),
-            ),
-            Span::styled(scan_indicator, Style::default().fg(Color::Yellow)),
-        ]))
-        .block(Block::default().borders(Borders::BOTTOM));
+        if is_scanning && area.height >= 4 {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(2), Constraint::Length(2)])
+                .split(area);
 
-        f.render_widget(header, area);
+            let header = Paragraph::new(Line::from(vec![
+                Span::styled(
+                    " CleanX ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw("System Cleaner"),
+                Span::raw("   "),
+                Span::styled(
+                    format!(
+                        "Total: {} | Selected: {}",
+                        format_size(total_size),
+                        format_size(selected_size)
+                    ),
+                    Style::default().fg(Color::Green),
+                ),
+                Span::styled(scan_indicator, Style::default().fg(Color::Yellow)),
+            ]));
+            f.render_widget(header, chunks[0]);
+
+            let current_path = self.scan_progress.current_path.as_deref().unwrap_or("");
+            let truncated = if current_path.len() > 80 {
+                format!("...{}", &current_path[current_path.len() - 77..])
+            } else {
+                current_path.to_string()
+            };
+            let scan_line = Paragraph::new(Line::from(vec![
+                Span::styled(" Scanning: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(truncated, Style::default().fg(Color::Gray)),
+            ]))
+            .block(Block::default().borders(Borders::BOTTOM));
+            f.render_widget(scan_line, chunks[1]);
+        } else {
+            let header = Paragraph::new(Line::from(vec![
+                Span::styled(
+                    " CleanX ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw("System Cleaner"),
+                Span::raw("   "),
+                Span::styled(
+                    format!(
+                        "Total: {} | Selected: {}",
+                        format_size(total_size),
+                        format_size(selected_size)
+                    ),
+                    Style::default().fg(Color::Green),
+                ),
+                Span::styled(scan_indicator, Style::default().fg(Color::Yellow)),
+            ]))
+            .block(Block::default().borders(Borders::BOTTOM));
+            f.render_widget(header, area);
+        }
     }
 
     fn render_main(&mut self, f: &mut Frame, area: Rect) {

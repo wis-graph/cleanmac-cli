@@ -2,6 +2,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -32,12 +33,13 @@ pub enum SafetyLevel {
     Protected,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ScanConfig {
     pub min_size: u64,
     pub max_depth: usize,
     pub excluded_paths: Vec<PathBuf>,
     pub follow_symlinks: bool,
+    pub progress_callback: Option<Arc<dyn Fn(&str) + Send + Sync>>,
 }
 
 impl Default for ScanConfig {
@@ -47,6 +49,15 @@ impl Default for ScanConfig {
             max_depth: 3,
             excluded_paths: Vec::new(),
             follow_symlinks: false,
+            progress_callback: None,
+        }
+    }
+}
+
+impl ScanConfig {
+    pub fn report_progress(&self, path: &str) {
+        if let Some(cb) = &self.progress_callback {
+            cb(path);
         }
     }
 }

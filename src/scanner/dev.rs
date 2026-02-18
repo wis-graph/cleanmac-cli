@@ -65,6 +65,7 @@ impl Scanner for DevJunkScanner {
 
             for (pattern_name, pattern) in &self.patterns {
                 let full_pattern = root.join(pattern);
+                config.report_progress(&full_pattern.to_string_lossy());
 
                 for entry in glob::glob(&full_pattern.to_string_lossy())?.filter_map(|e| e.ok()) {
                     if !entry.is_dir() {
