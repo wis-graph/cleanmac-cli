@@ -169,6 +169,11 @@ impl App {
                     Box::new(crate::scanner::LargeOldFilesScanner::new()) as Box<dyn Scanner>,
                     crate::plugin::ScannerCategory::System,
                 ),
+                (
+                    "Mail Attachments",
+                    Box::new(crate::scanner::MailAttachmentsScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::System,
+                ),
             ];
 
             let total = scanners.len();
@@ -220,7 +225,7 @@ impl App {
                 current_scanner: "Initializing...".to_string(),
                 current_path: None,
                 scanners_done: 0,
-                total_scanners: 6,
+                total_scanners: 7,
                 start_time: None,
             },
             clean_result: None,
@@ -290,6 +295,11 @@ impl App {
                 (
                     "Large & Old Files",
                     Box::new(crate::scanner::LargeOldFilesScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::System,
+                ),
+                (
+                    "Mail Attachments",
+                    Box::new(crate::scanner::MailAttachmentsScanner::new()) as Box<dyn Scanner>,
                     crate::plugin::ScannerCategory::System,
                 ),
             ];

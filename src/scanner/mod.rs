@@ -3,6 +3,7 @@ pub mod caches;
 pub mod dev;
 pub mod large_files;
 pub mod logs;
+pub mod mail;
 pub mod trash;
 
 pub use browser::BrowserCacheScanner;
@@ -10,6 +11,7 @@ pub use caches::CacheScanner;
 pub use dev::DevJunkScanner;
 pub use large_files::LargeOldFilesScanner;
 pub use logs::LogScanner;
+pub use mail::MailAttachmentsScanner;
 pub use trash::TrashScanner;
 
 use chrono::{DateTime, Utc};
