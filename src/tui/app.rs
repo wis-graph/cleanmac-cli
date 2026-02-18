@@ -202,6 +202,11 @@ impl App {
                 name: "Photo Junk".into(),
                 enabled: true,
             },
+            ScannerInfo {
+                id: "music_junk".into(),
+                name: "Music & Podcasts".into(),
+                enabled: true,
+            },
         ];
 
         let mut list_state = ListState::default();
@@ -343,6 +348,11 @@ impl App {
             (
                 "photo_junk".into(),
                 Box::new(crate::scanner::PhotoJunkScanner::new()) as Box<dyn Scanner>,
+                crate::plugin::ScannerCategory::System,
+            ),
+            (
+                "music_junk".into(),
+                Box::new(crate::scanner::MusicJunkScanner::new()) as Box<dyn Scanner>,
                 crate::plugin::ScannerCategory::System,
             ),
         ];
