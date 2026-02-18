@@ -212,6 +212,11 @@ impl App {
                 name: "Duplicates".into(),
                 enabled: false,
             },
+            ScannerInfo {
+                id: "privacy".into(),
+                name: "Privacy".into(),
+                enabled: false,
+            },
         ];
 
         let mut list_state = ListState::default();
@@ -364,6 +369,11 @@ impl App {
                 "duplicates".into(),
                 Box::new(crate::scanner::DuplicatesScanner::new()) as Box<dyn Scanner>,
                 crate::plugin::ScannerCategory::System,
+            ),
+            (
+                "privacy".into(),
+                Box::new(crate::scanner::PrivacyScanner::new()) as Box<dyn Scanner>,
+                crate::plugin::ScannerCategory::Browser,
             ),
         ];
 

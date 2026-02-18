@@ -7,6 +7,7 @@ pub mod logs;
 pub mod mail;
 pub mod music;
 pub mod photo;
+pub mod privacy;
 pub mod trash;
 
 pub use browser::BrowserCacheScanner;
@@ -18,6 +19,7 @@ pub use logs::LogScanner;
 pub use mail::MailAttachmentsScanner;
 pub use music::MusicJunkScanner;
 pub use photo::PhotoJunkScanner;
+pub use privacy::PrivacyScanner;
 pub use trash::TrashScanner;
 
 use chrono::{DateTime, Utc};
