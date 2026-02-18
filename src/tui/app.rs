@@ -53,7 +53,6 @@ pub struct App {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AppMode {
-    Scanning,
     Review,
     ConfirmClean,
     ResultDisplay,
@@ -203,15 +202,112 @@ impl App {
             selected_category: 0,
             selected_items: HashSet::new(),
             list_state: ListState::default(),
-            mode: AppMode::Scanning,
+            mode: AppMode::Review,
             prev_mode: None,
             should_quit: false,
             message: None,
-            scan_progress: ScanProgress::default(),
+            scan_progress: ScanProgress {
+                current_scanner: "Initializing...".to_string(),
+                scanners_done: 0,
+                total_scanners: 6,
+                start_time: None,
+            },
             clean_result: None,
             apps_mode: AppsModeState::default(),
             scan_receiver: Some(rx),
         }
+    }
+
+    fn start_scan(&mut self) {
+        let (tx, rx) = mpsc::channel();
+
+        let scan_config = ScanConfig {
+            min_size: self.config.scan.min_size_bytes,
+            max_depth: self.config.scan.max_depth,
+            excluded_paths: self
+                .config
+                .scan
+                .excluded_paths
+                .iter()
+                .map(|s| s.into())
+                .collect(),
+            follow_symlinks: self.config.scan.follow_symlinks,
+        };
+
+        self.scan_progress = ScanProgress {
+            current_scanner: "Initializing...".to_string(),
+            scanners_done: 0,
+            total_scanners: 6,
+            start_time: None,
+        };
+        self.scan_receiver = Some(rx);
+
+        thread::spawn(move || {
+            let scanners: Vec<(&str, Box<dyn Scanner>, crate::plugin::ScannerCategory)> = vec![
+                (
+                    "System Caches",
+                    Box::new(crate::scanner::CacheScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::System,
+                ),
+                (
+                    "System Logs",
+                    Box::new(crate::scanner::LogScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::System,
+                ),
+                (
+                    "Trash",
+                    Box::new(crate::scanner::TrashScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::Trash,
+                ),
+                (
+                    "Browser Caches",
+                    Box::new(crate::scanner::BrowserCacheScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::Browser,
+                ),
+                (
+                    "Development Junk",
+                    Box::new(crate::scanner::DevJunkScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::Development,
+                ),
+                (
+                    "Large & Old Files",
+                    Box::new(crate::scanner::LargeOldFilesScanner::new()) as Box<dyn Scanner>,
+                    crate::plugin::ScannerCategory::System,
+                ),
+            ];
+
+            let total = scanners.len();
+            let mut total_size: u64 = 0;
+            let mut total_items: usize = 0;
+
+            for (idx, (name, scanner, category)) in scanners.into_iter().enumerate() {
+                let _ = tx.send(ScanMessage::ScannerStart {
+                    name: name.to_string(),
+                    index: idx,
+                    total,
+                });
+
+                let results = scanner.scan(&scan_config).unwrap_or_default();
+
+                let cat = CategoryScanResult {
+                    scanner_id: scanner.id().to_string(),
+                    name: name.to_string(),
+                    category,
+                    icon: String::new(),
+                    items: results,
+                };
+
+                total_size += cat.total_size();
+                total_items += cat.items.len();
+
+                let _ = tx.send(ScanMessage::ScannerDone { category: cat });
+            }
+
+            let _ = tx.send(ScanMessage::ScanComplete {
+                total_size,
+                total_items,
+            });
+        });
     }
 
     pub fn new_apps_mode() -> Self {
@@ -366,64 +462,13 @@ impl App {
         f.render_widget(loading, area);
     }
 
-    fn render_scanning(&self, f: &mut Frame) {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Min(10),
-                Constraint::Length(3),
-            ])
-            .split(f.area());
-
-        self.render_header(f, chunks[0]);
-        self.render_scan_progress(f, chunks[1]);
-        self.render_footer(f, chunks[2]);
-    }
-
-    fn render_scan_progress(&self, f: &mut Frame, area: Rect) {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Percentage(40),
-                Constraint::Percentage(20),
-                Constraint::Percentage(40),
-            ])
-            .split(area);
-
-        let progress = if self.scan_progress.total_scanners > 0 {
-            (self.scan_progress.scanners_done * 100) / self.scan_progress.total_scanners
-        } else {
-            0
-        };
-
-        let title = Paragraph::new(Line::from(vec![
-            Span::styled("Scanning", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw("..."),
-        ]))
-        .alignment(Alignment::Center);
-        f.render_widget(title, chunks[0]);
-
-        let gauge = Gauge::default()
-            .block(Block::default().borders(Borders::ALL))
-            .gauge_style(Style::default().fg(Color::Cyan))
-            .percent(progress as u16)
-            .label(format!(
-                "{} / {} - {}",
-                self.scan_progress.scanners_done,
-                self.scan_progress.total_scanners,
-                self.scan_progress.current_scanner
-            ));
-        f.render_widget(gauge, chunks[1]);
-    }
-
     fn handle_key(&mut self, code: KeyCode, modifiers: KeyModifiers) -> Result<()> {
         match self.mode {
             AppMode::Review => self.handle_review_key(code, modifiers),
             AppMode::ConfirmClean => self.handle_confirm_key(code),
             AppMode::ResultDisplay => self.handle_result_key(code),
             AppMode::Help => self.handle_help_key(code),
-            AppMode::Scanning | AppMode::LoadingRelatedFiles => Ok(()),
+            AppMode::LoadingRelatedFiles => Ok(()),
             AppMode::AppList => self.handle_app_list_key(code),
             AppMode::UninstallReview => self.handle_uninstall_review_key(code),
             AppMode::UninstallResult => self.handle_uninstall_result_key(code),
@@ -451,7 +496,8 @@ impl App {
             }
             KeyCode::Char('r') => {
                 self.selected_items.clear();
-                self.mode = AppMode::Scanning;
+                self.report = None;
+                self.start_scan();
             }
             _ => {}
         }
@@ -760,10 +806,6 @@ impl App {
 
     fn render(&mut self, f: &mut Frame) {
         match self.mode {
-            AppMode::Scanning => {
-                self.render_scanning(f);
-                return;
-            }
             AppMode::AppList => {
                 self.render_app_list(f);
                 return;
@@ -805,6 +847,16 @@ impl App {
 
         let selected_size: u64 = self.get_selected_items().iter().map(|i| i.size).sum();
 
+        let is_scanning = self.scan_receiver.is_some();
+        let scan_indicator = if is_scanning {
+            format!(
+                " [Scanning {} / {}]",
+                self.scan_progress.scanners_done, self.scan_progress.total_scanners
+            )
+        } else {
+            String::new()
+        };
+
         let header = Paragraph::new(Line::from(vec![
             Span::styled(
                 " CleanX ",
@@ -822,6 +874,7 @@ impl App {
                 ),
                 Style::default().fg(Color::Green),
             ),
+            Span::styled(scan_indicator, Style::default().fg(Color::Yellow)),
         ]))
         .block(Block::default().borders(Borders::BOTTOM));
 
