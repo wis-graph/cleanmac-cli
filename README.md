@@ -6,7 +6,14 @@ macOS 시스템 클리너 - CleanMyMac에서 영감을 받은 CLI + TUI 도구
 
 ## Demo
 
-https://github.com/wis-graph/cleanmac-cli/releases/download/v1.0.3-demo/demo.mp4
+<script src="https://asciinema.org/a/player.js"></script>
+<asciinema-player 
+  src="https://raw.githubusercontent.com/wis-graph/cleanmac-cli/main/demo.cast" 
+  rows="20" 
+  cols="80" 
+  controls="true"
+  speed="1">
+</asciinema-player>
 
 ## 설치
 
