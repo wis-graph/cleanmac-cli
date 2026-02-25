@@ -192,8 +192,19 @@ impl App {
                 handle_review_key(&mut ctx, code)
             }
             AppMode::ConfirmClean => {
+                let selected_items: Vec<_> = self
+                    .report
+                    .iter()
+                    .flat_map(|r| r.categories.iter())
+                    .flat_map(|c| c.items.iter())
+                    .filter(|item| self.selected_items.contains(&item.id))
+                    .cloned()
+                    .collect();
                 let mut ctx = common::ConfirmContext {
                     mode: &mut self.mode,
+                    selected_items: &self.selected_items,
+                    report_items: selected_items,
+                    clean_result: &mut self.clean_result,
                 };
                 handle_confirm_key(&mut ctx, code)
             }

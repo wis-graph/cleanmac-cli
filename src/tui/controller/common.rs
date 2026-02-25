@@ -1,14 +1,42 @@
-use crate::tui::state::AppMode;
+use crate::cleaner::DefaultCleaner;
+use crate::plugin::{CleanConfig, Cleaner, ScanResult};
+use crate::tui::state::{AppMode, CleanResultDisplay};
 use anyhow::Result;
 use crossterm::event::KeyCode;
+use std::collections::HashSet;
 
 pub struct ConfirmContext<'a> {
     pub mode: &'a mut AppMode,
+    pub selected_items: &'a HashSet<String>,
+    pub report_items: Vec<ScanResult>,
+    pub clean_result: &'a mut Option<CleanResultDisplay>,
 }
 
 pub fn handle_confirm_key(ctx: &mut ConfirmContext, code: KeyCode) -> Result<()> {
     match code {
         KeyCode::Char('y') | KeyCode::Enter => {
+            let items_to_clean: Vec<ScanResult> = ctx
+                .report_items
+                .iter()
+                .filter(|item| ctx.selected_items.contains(&item.id))
+                .cloned()
+                .collect();
+
+            let cleaner = DefaultCleaner::new();
+            let config = CleanConfig {
+                dry_run: false,
+                log_history: true,
+            };
+
+            let result = cleaner.clean(&items_to_clean, &config)?;
+
+            *ctx.clean_result = Some(CleanResultDisplay {
+                success_count: result.success_count,
+                failed_count: result.failed_count,
+                total_freed: result.total_freed,
+                duration: result.duration,
+            });
+
             *ctx.mode = AppMode::ResultDisplay;
         }
         KeyCode::Char('n') | KeyCode::Esc => {
