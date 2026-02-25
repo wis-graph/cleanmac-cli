@@ -1,6 +1,6 @@
 [package]
 name = "cleanmac"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2021"
 description = "A fast, AI-ready macOS system cleaner CLI with TUI"
 license = "MIT"

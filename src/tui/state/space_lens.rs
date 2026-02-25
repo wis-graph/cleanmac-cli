@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct FolderEntry {
@@ -18,6 +19,20 @@ pub struct CachedScan {
     pub was_loading: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct DeleteResult {
+    pub path: PathBuf,
+    pub success: bool,
+    pub size: u64,
+    pub error: Option<String>,
+}
+
+pub enum SpaceLensMode {
+    Browse,
+    ConfirmDelete,
+    ShowResult,
+}
+
 pub struct SpaceLensState {
     pub current_path: PathBuf,
     pub entries: Vec<FolderEntry>,
@@ -27,6 +42,9 @@ pub struct SpaceLensState {
     pub pending_scans: HashMap<PathBuf, Receiver<FolderEntry>>,
     pub parallel_scan: bool,
     pub thread_count: usize,
+    pub delete_mode: SpaceLensMode,
+    pub pending_delete: Option<FolderEntry>,
+    pub delete_result: Option<DeleteResult>,
 }
 
 impl Default for SpaceLensState {
@@ -40,6 +58,9 @@ impl Default for SpaceLensState {
             pending_scans: HashMap::new(),
             parallel_scan: true,
             thread_count: 4,
+            delete_mode: SpaceLensMode::Browse,
+            pending_delete: None,
+            delete_result: None,
         }
     }
 }

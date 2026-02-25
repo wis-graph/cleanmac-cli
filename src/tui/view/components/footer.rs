@@ -116,6 +116,8 @@ pub fn render_space_lens_footer(f: &mut Frame, area: Rect, parallel: bool) {
         Span::raw(" Nav  "),
         Span::styled("Enter", Style::default().fg(Color::Cyan)),
         Span::raw(" Open  "),
+        Span::styled("d", Style::default().fg(Color::Cyan)),
+        Span::raw(" Delete  "),
         Span::styled("Esc/⌫", Style::default().fg(Color::Cyan)),
         Span::raw(" Up/Back  "),
         Span::styled("r", Style::default().fg(Color::Cyan)),

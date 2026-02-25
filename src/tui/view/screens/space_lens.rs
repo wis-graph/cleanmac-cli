@@ -1,12 +1,13 @@
 use crate::tui::service::disk::get_active_threads;
-use crate::tui::state::SpaceLensState;
+use crate::tui::state::{DeleteResult, SpaceLensMode, SpaceLensState};
 use crate::tui::view::components::footer::render_space_lens_footer;
+use crate::tui::view::components::utils::centered_rect;
 use crate::utils::format_size;
-use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::ListState;
-use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
 use ratatui::Frame;
 
 pub fn render_space_lens(
@@ -134,4 +135,123 @@ pub fn render_space_lens(
     f.render_stateful_widget(list, chunks[1], list_state);
 
     render_space_lens_footer(f, chunks[2], space_lens.parallel_scan);
+
+    match space_lens.delete_mode {
+        SpaceLensMode::ConfirmDelete => {
+            if let Some(ref entry) = space_lens.pending_delete {
+                render_delete_confirm_modal(f, entry);
+            }
+        }
+        SpaceLensMode::ShowResult => {
+            if let Some(ref result) = space_lens.delete_result {
+                render_delete_result_modal(f, result);
+            }
+        }
+        SpaceLensMode::Browse => {}
+    }
+}
+
+fn render_delete_confirm_modal(f: &mut Frame, entry: &crate::tui::state::FolderEntry) {
+    let area = centered_rect(60, 35, f.area());
+
+    let dir_text = if entry.is_dir { "folder" } else { "file" };
+    let text = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Delete ", Style::default().fg(Color::White)),
+            Span::styled(dir_text, Style::default().fg(Color::Yellow)),
+            Span::styled("?", Style::default().fg(Color::White)),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            &entry.name,
+            Style::default().fg(Color::Cyan),
+        )]),
+        Line::from(vec![Span::styled(
+            format_size(entry.size),
+            Style::default().fg(Color::Green),
+        )]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "This action cannot be undone.",
+            Style::default().fg(Color::Red),
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("[y/Enter]", Style::default().fg(Color::Green)),
+            Span::raw(" Confirm     "),
+            Span::styled("[n/Esc]", Style::default().fg(Color::Red)),
+            Span::raw(" Cancel"),
+        ]),
+    ];
+
+    let paragraph = Paragraph::new(text)
+        .block(
+            Block::default()
+                .title(" Confirm Delete ")
+                .borders(Borders::ALL),
+        )
+        .alignment(Alignment::Center);
+
+    f.render_widget(Clear, area);
+    f.render_widget(paragraph, area);
+}
+
+fn render_delete_result_modal(f: &mut Frame, result: &DeleteResult) {
+    let area = centered_rect(60, 30, f.area());
+
+    let text = if result.success {
+        vec![
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "Deleted Successfully!",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("Freed: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format_size(result.size),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Press Enter to continue",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ]
+    } else {
+        vec![
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "Delete Failed!",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("Error: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    result.error.as_deref().unwrap_or("Unknown error"),
+                    Style::default().fg(Color::Red),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Press Enter to continue",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ]
+    };
+
+    let paragraph = Paragraph::new(text)
+        .block(Block::default().title(" Result ").borders(Borders::ALL))
+        .alignment(Alignment::Center);
+
+    f.render_widget(Clear, area);
+    f.render_widget(paragraph, area);
 }
