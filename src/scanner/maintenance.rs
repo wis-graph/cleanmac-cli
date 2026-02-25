@@ -119,10 +119,6 @@ impl Scanner for MaintenanceScanner {
         ScannerCategory::System
     }
 
-    fn icon(&self) -> &str {
-        ""
-    }
-
     fn scan(&self, _config: &ScanConfig) -> Result<Vec<ScanResult>> {
         let mut items = Vec::new();
 
@@ -156,10 +152,6 @@ impl Scanner for MaintenanceScanner {
 
     fn is_available(&self) -> bool {
         true
-    }
-
-    fn estimated_duration(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(1)
     }
 }
 

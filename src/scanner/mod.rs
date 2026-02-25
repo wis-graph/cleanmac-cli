@@ -9,6 +9,7 @@ pub mod maintenance;
 pub mod music;
 pub mod photo;
 pub mod privacy;
+pub mod startup;
 pub mod trash;
 
 pub use browser::BrowserCacheScanner;
@@ -22,6 +23,7 @@ pub use maintenance::MaintenanceScanner;
 pub use music::MusicJunkScanner;
 pub use photo::PhotoJunkScanner;
 pub use privacy::PrivacyScanner;
+pub use startup::StartupItemsScanner;
 pub use trash::TrashScanner;
 
 use chrono::{DateTime, Utc};

@@ -64,10 +64,6 @@ impl Scanner for DuplicatesScanner {
         ScannerCategory::System
     }
 
-    fn icon(&self) -> &str {
-        ""
-    }
-
     fn scan(&self, config: &ScanConfig) -> Result<Vec<ScanResult>> {
         let mut items = Vec::new();
         let mut size_map: HashMap<u64, Vec<PathBuf>> = HashMap::new();
@@ -189,10 +185,6 @@ impl Scanner for DuplicatesScanner {
 
     fn is_available(&self) -> bool {
         self.search_paths.iter().any(|p| p.exists())
-    }
-
-    fn estimated_duration(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(30)
     }
 }
 

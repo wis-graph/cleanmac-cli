@@ -1,5 +1,4 @@
 use crate::plugin::SafetyLevel;
-use anyhow::Result;
 use std::path::Path;
 
 pub struct SafetyChecker {
@@ -64,32 +63,6 @@ impl SafetyChecker {
             self.check_path(path),
             SafetyLevel::Safe | SafetyLevel::Caution
         )
-    }
-
-    pub fn get_running_apps(&self) -> Result<Vec<String>> {
-        use std::process::Command;
-
-        let output = Command::new("osascript")
-            .arg("-e")
-            .arg("tell application \"System Events\" to get name of every process whose background only is false")
-            .output();
-
-        match output {
-            Ok(output) if output.status.success() => {
-                let apps = String::from_utf8_lossy(&output.stdout);
-                Ok(apps.split(", ").map(|s| s.trim().to_string()).collect())
-            }
-            _ => Ok(Vec::new()),
-        }
-    }
-
-    pub fn is_app_running(&self, app_name: &str) -> bool {
-        self.get_running_apps()
-            .map(|apps| {
-                apps.iter()
-                    .any(|a| a.to_lowercase().contains(&app_name.to_lowercase()))
-            })
-            .unwrap_or(false)
     }
 }
 

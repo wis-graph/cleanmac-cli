@@ -10,7 +10,6 @@ pub enum ScannerCategory {
     System,
     Browser,
     Development,
-    Apps,
     Trash,
 }
 
@@ -20,7 +19,6 @@ impl std::fmt::Display for ScannerCategory {
             ScannerCategory::System => write!(f, "System"),
             ScannerCategory::Browser => write!(f, "Browser"),
             ScannerCategory::Development => write!(f, "Development"),
-            ScannerCategory::Apps => write!(f, "Apps"),
             ScannerCategory::Trash => write!(f, "Trash"),
         }
     }
@@ -38,7 +36,6 @@ pub struct ScanConfig {
     pub min_size: u64,
     pub max_depth: usize,
     pub excluded_paths: Vec<PathBuf>,
-    pub follow_symlinks: bool,
     pub progress_callback: Option<Arc<dyn Fn(&str) + Send + Sync>>,
     pub item_callback: Option<Arc<dyn Fn(ScanResult) + Send + Sync>>,
 }
@@ -49,7 +46,6 @@ impl Default for ScanConfig {
             min_size: 1024 * 1024,
             max_depth: 3,
             excluded_paths: Vec::new(),
-            follow_symlinks: false,
             progress_callback: None,
             item_callback: None,
         }
@@ -77,7 +73,6 @@ pub struct ScanResult {
     pub path: PathBuf,
     pub size: u64,
     pub file_count: u64,
-    pub dir_count: u64,
     pub last_accessed: Option<DateTime<Utc>>,
     pub last_modified: Option<DateTime<Utc>>,
     pub safety_level: SafetyLevel,
@@ -93,7 +88,6 @@ impl ScanResult {
             path,
             size: 0,
             file_count: 0,
-            dir_count: 0,
             last_accessed: None,
             last_modified: None,
             safety_level: SafetyLevel::Safe,
@@ -137,16 +131,10 @@ pub trait Scanner: Send + Sync {
     fn id(&self) -> &str;
     fn name(&self) -> &str;
     fn category(&self) -> ScannerCategory;
-    fn icon(&self) -> &str {
-        ""
-    }
 
     fn scan(&self, config: &ScanConfig) -> Result<Vec<ScanResult>>;
     fn is_available(&self) -> bool {
         true
-    }
-    fn estimated_duration(&self) -> Duration {
-        Duration::from_secs(5)
     }
 }
 

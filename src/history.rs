@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -115,17 +115,6 @@ impl HistoryLogger {
             path,
             size,
         })
-    }
-
-    pub fn clear(&self) -> Result<()> {
-        if self.log_path.exists() {
-            fs::remove_file(&self.log_path)?;
-        }
-        Ok(())
-    }
-
-    pub fn path(&self) -> &PathBuf {
-        &self.log_path
     }
 }
 

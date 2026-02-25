@@ -1,12 +1,10 @@
 use super::{calculate_dir_size, count_files, get_last_accessed, get_last_modified};
 use crate::plugin::{SafetyLevel, ScanConfig, ScanResult, Scanner, ScannerCategory};
-use crate::safety::SafetyChecker;
 use anyhow::Result;
 use std::path::PathBuf;
 
 pub struct BrowserCacheScanner {
     cache_paths: Vec<(String, PathBuf)>,
-    safety_checker: SafetyChecker,
 }
 
 impl BrowserCacheScanner {
@@ -50,7 +48,6 @@ impl BrowserCacheScanner {
                     home.join("Library/Caches/com.kagi.kagimac"),
                 ),
             ],
-            safety_checker: SafetyChecker::new(),
         }
     }
 }
@@ -66,10 +63,6 @@ impl Scanner for BrowserCacheScanner {
 
     fn category(&self) -> ScannerCategory {
         ScannerCategory::Browser
-    }
-
-    fn icon(&self) -> &str {
-        ""
     }
 
     fn scan(&self, config: &ScanConfig) -> Result<Vec<ScanResult>> {

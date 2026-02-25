@@ -51,10 +51,6 @@ impl Scanner for DevJunkScanner {
         ScannerCategory::Development
     }
 
-    fn icon(&self) -> &str {
-        ""
-    }
-
     fn scan(&self, config: &ScanConfig) -> Result<Vec<ScanResult>> {
         let mut items = Vec::new();
 
@@ -117,10 +113,6 @@ impl Scanner for DevJunkScanner {
 
     fn is_available(&self) -> bool {
         true
-    }
-
-    fn estimated_duration(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(10)
     }
 }
 

@@ -83,10 +83,6 @@ impl Scanner for PrivacyScanner {
         ScannerCategory::Browser
     }
 
-    fn icon(&self) -> &str {
-        ""
-    }
-
     fn scan(&self, config: &ScanConfig) -> Result<Vec<ScanResult>> {
         let mut items = Vec::new();
 
@@ -166,10 +162,6 @@ impl Scanner for PrivacyScanner {
 
     fn is_available(&self) -> bool {
         self.search_paths.iter().any(|(_, p, _)| p.exists())
-    }
-
-    fn estimated_duration(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(5)
     }
 }
 

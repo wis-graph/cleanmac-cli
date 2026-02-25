@@ -1,12 +1,24 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
-#[command(name = "cleanx")]
+#[command(name = "cleanmac")]
 #[command(about = "A CLI tool for cleaning macOS system", long_about = None)]
 #[command(version)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum OutputFormat {
+    Human,
+    Json,
+}
+
+impl Default for OutputFormat {
+    fn default() -> Self {
+        Self::Human
+    }
 }
 
 #[derive(Subcommand)]
@@ -15,8 +27,47 @@ pub enum Commands {
     Scan {
         #[arg(short, long, default_value = "all")]
         category: String,
+        #[arg(short = 'F', long, default_value = "human")]
+        format: OutputFormat,
+        #[arg(short, long)]
+        out: Option<String>,
+        #[arg(short = 'M', long, help = "Collect Spotlight metadata (slower)")]
+        metadata: bool,
     },
-    #[command(about = "Clean scanned items")]
+    #[command(about = "Create a cleanup plan from scan results")]
+    Plan {
+        #[arg(short, long)]
+        from: Option<String>,
+        #[arg(short, long)]
+        category: Option<String>,
+        #[arg(short = 'F', long, default_value = "human")]
+        format: OutputFormat,
+        #[arg(short, long)]
+        out: Option<String>,
+    },
+    #[command(about = "Execute the cleanup plan")]
+    Apply {
+        #[arg(short, long)]
+        plan: Option<String>,
+        #[arg(short, long)]
+        category: Option<String>,
+        #[arg(long)]
+        yes: bool,
+        #[arg(short = 'F', long, default_value = "human")]
+        format: OutputFormat,
+        #[arg(short, long)]
+        out: Option<String>,
+    },
+    #[command(about = "Generate a report from scan or execution results")]
+    Report {
+        #[arg(short, long)]
+        from: String,
+        #[arg(short = 'F', long, default_value = "md")]
+        format: ReportFormat,
+        #[arg(short, long)]
+        out: Option<String>,
+    },
+    #[command(about = "Clean scanned items (legacy, use 'apply')")]
     Clean {
         #[arg(short, long, default_value = "all")]
         category: String,
@@ -32,6 +83,15 @@ pub enum Commands {
     },
     #[command(about = "Browse and uninstall apps (TUI)")]
     Apps,
+    #[command(about = "Visualize disk usage (TUI)")]
+    Space {
+        #[arg(short, long)]
+        path: Option<String>,
+        #[arg(short = 'S', long)]
+        single: bool,
+        #[arg(short = 't', long, default_value = "4")]
+        threads: usize,
+    },
     #[command(about = "Manage configuration")]
     Config {
         #[command(subcommand)]
@@ -42,6 +102,15 @@ pub enum Commands {
         #[arg(short, long, default_value = "20")]
         limit: usize,
     },
+    #[command(about = "Run as MCP server (for AI integration)")]
+    Mcp,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum ReportFormat {
+    Json,
+    Md,
+    Txt,
 }
 
 #[derive(Subcommand)]

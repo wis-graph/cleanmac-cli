@@ -23,8 +23,6 @@ pub struct ScanConfig {
     pub excluded_paths: Vec<String>,
     #[serde(default)]
     pub scan_paths: Vec<String>,
-    #[serde(default)]
-    pub follow_symlinks: bool,
 }
 
 fn default_min_size() -> u64 {
@@ -42,7 +40,6 @@ impl Default for ScanConfig {
             max_depth: default_max_depth(),
             excluded_paths: Vec::new(),
             scan_paths: Vec::new(),
-            follow_symlinks: false,
         }
     }
 }
@@ -126,13 +123,6 @@ impl Config {
         if !self.scan.excluded_paths.contains(&path) {
             self.scan.excluded_paths.push(path);
         }
-    }
-
-    pub fn is_excluded(&self, path: &str) -> bool {
-        self.scan
-            .excluded_paths
-            .iter()
-            .any(|excluded| path.starts_with(excluded))
     }
 
     pub fn data_dir() -> PathBuf {

@@ -5,7 +5,7 @@ use anyhow::Result;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 pub struct DefaultCleaner {
     safety_checker: SafetyChecker,

@@ -1,12 +1,10 @@
 use super::{calculate_dir_size, count_files, get_last_accessed, get_last_modified};
 use crate::plugin::{SafetyLevel, ScanConfig, ScanResult, Scanner, ScannerCategory};
-use crate::safety::SafetyChecker;
 use anyhow::Result;
 use std::path::PathBuf;
 
 pub struct TrashScanner {
     trash_paths: Vec<PathBuf>,
-    safety_checker: SafetyChecker,
 }
 
 impl TrashScanner {
@@ -15,7 +13,6 @@ impl TrashScanner {
 
         Self {
             trash_paths: vec![home.join(".Trash")],
-            safety_checker: SafetyChecker::new(),
         }
     }
 }
@@ -31,10 +28,6 @@ impl Scanner for TrashScanner {
 
     fn category(&self) -> ScannerCategory {
         ScannerCategory::Trash
-    }
-
-    fn icon(&self) -> &str {
-        ""
     }
 
     fn scan(&self, config: &ScanConfig) -> Result<Vec<ScanResult>> {

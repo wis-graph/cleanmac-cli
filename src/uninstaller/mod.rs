@@ -10,11 +10,7 @@ use walkdir::WalkDir;
 #[derive(Debug, Clone)]
 pub struct PlistInfo {
     pub bundle_id: String,
-    pub name: String,
-    pub display_name: String,
     pub version: String,
-    pub build_version: String,
-    pub minimum_os: String,
 }
 
 pub struct AppBundle {
@@ -76,11 +72,7 @@ impl AppBundle {
 
         Ok(PlistInfo {
             bundle_id: get_string("CFBundleIdentifier"),
-            name: get_string("CFBundleName"),
-            display_name: get_string("CFBundleDisplayName"),
             version: get_string("CFBundleShortVersionString"),
-            build_version: get_string("CFBundleVersion"),
-            minimum_os: get_string("LSMinimumSystemVersion"),
         })
     }
 
@@ -454,14 +446,51 @@ impl Uninstaller {
             return Ok(true);
         }
 
-        if path.is_dir() {
-            fs::remove_dir_all(path)?;
+        let result = if path.is_dir() {
+            fs::remove_dir_all(path)
         } else {
-            fs::remove_file(path)?;
-        }
+            fs::remove_file(path)
+        };
 
-        println!("Deleted: {}", path.display());
-        Ok(true)
+        match result {
+            Ok(()) => {
+                println!("Deleted: {}", path.display());
+                Ok(true)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                self.delete_with_admin_privileges(path)
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn delete_with_admin_privileges(&self, path: &Path) -> Result<bool> {
+        let path_str = path.to_string_lossy();
+        let script = if path.is_dir() {
+            format!(
+                "do shell script \"rm -rf '{}'\" with administrator privileges",
+                path_str
+            )
+        } else {
+            format!(
+                "do shell script \"rm '{}'\" with administrator privileges",
+                path_str
+            )
+        };
+
+        let output = Command::new("osascript").arg("-e").arg(&script).output();
+
+        match output {
+            Ok(o) if o.status.success() => {
+                println!("Deleted (with admin): {}", path.display());
+                Ok(true)
+            }
+            Ok(o) => {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                anyhow::bail!("Admin privileges denied or failed: {}", stderr);
+            }
+            Err(e) => anyhow::bail!("Failed to request admin privileges: {}", e),
+        }
     }
 }
 
@@ -479,12 +508,4 @@ impl UninstallResult {
     fn new() -> Self {
         Self::default()
     }
-}
-
-pub fn find_app(name: &str) -> Option<AppBundle> {
-    AppDetector::new().find_by_name(name)
-}
-
-pub fn list_apps() -> Vec<AppBundle> {
-    AppDetector::new().list_all()
 }

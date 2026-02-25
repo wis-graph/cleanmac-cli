@@ -34,10 +34,6 @@ impl Scanner for LogScanner {
         ScannerCategory::System
     }
 
-    fn icon(&self) -> &str {
-        ""
-    }
-
     fn scan(&self, config: &ScanConfig) -> Result<Vec<ScanResult>> {
         let mut items = Vec::new();
 
