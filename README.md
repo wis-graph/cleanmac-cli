@@ -6,7 +6,7 @@ macOS 시스템 클리너 - CleanMyMac에서 영감을 받은 CLI + TUI 도구
 
 ## Demo
 
-<video src="https://github.com/wis-graph/cleanmac-cli/raw/master/demo.mp4" controls="controls" style="max-width: 100%;"></video>
+![Demo](demo.gif)
 
 ## 설치
 
