@@ -4,6 +4,15 @@ macOS 시스템 클리너 - CleanMyMac에서 영감을 받은 CLI + TUI 도구
 
 **AI-Readable**: JSON 출력과 MCP 서버 지원으로 AI와 연동 가능
 
+## 설치
+
+```bash
+brew tap wis-graph/cleanmac
+brew install cleanmac
+```
+
+또는 [GitHub Releases](https://github.com/wis-graph/cleanmac-cli/releases)에서 바이너리 다운로드
+
 ## 기능
 
 ### 시스템 정크
@@ -74,14 +83,13 @@ brew tap wis-graph/cleanmac
 brew install cleanmac
 ```
 
-### 수동 설치
+### 수동 설치 (개발자)
 
 ```bash
+git clone https://github.com/wis-graph/cleanmac-cli.git
+cd cleanmac-cli
 cargo build --release
 sudo cp target/release/cleanmac /usr/local/bin/
-
-# 선택: 짧은 alias
-sudo ln -s /usr/local/bin/cleanmac /usr/local/bin/cmr
 ```
 
 ## 사용법
