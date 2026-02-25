@@ -4,6 +4,10 @@ macOS 시스템 클리너 - CleanMyMac에서 영감을 받은 CLI + TUI 도구
 
 **AI-Readable**: JSON 출력과 MCP 서버 지원으로 AI와 연동 가능
 
+## Demo
+
+https://github.com/user-attachments/assets/demo.mp4
+
 ## 설치
 
 ```bash
