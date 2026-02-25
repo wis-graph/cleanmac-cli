@@ -67,6 +67,15 @@ macOS 시스템 클리너 - CleanMyMac에서 영감을 받은 CLI + TUI 도구
 
 ## 설치
 
+### Homebrew (권장)
+
+```bash
+brew tap wis-graph/cleanmac
+brew install cleanmac
+```
+
+### 수동 설치
+
 ```bash
 cargo build --release
 sudo cp target/release/cleanmac /usr/local/bin/
