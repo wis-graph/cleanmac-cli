@@ -205,12 +205,16 @@ impl App {
                     selected_items: &self.selected_items,
                     report_items: selected_items,
                     clean_result: &mut self.clean_result,
+                    deleted_ids: &mut self.deleted_ids,
                 };
                 handle_confirm_key(&mut ctx, code)
             }
             AppMode::ResultDisplay => {
                 let mut ctx = common::ResultContext {
                     mode: &mut self.mode,
+                    report: &mut self.report,
+                    selected_items: &mut self.selected_items,
+                    deleted_ids: &mut self.deleted_ids,
                 };
                 handle_result_key(&mut ctx, code)
             }

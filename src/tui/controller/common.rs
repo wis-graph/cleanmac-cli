@@ -1,4 +1,5 @@
 use crate::cleaner::DefaultCleaner;
+use crate::plugin::registry::ScanReport;
 use crate::plugin::{CleanConfig, Cleaner, ScanResult};
 use crate::tui::state::{AppMode, CleanResultDisplay};
 use anyhow::Result;
@@ -10,6 +11,7 @@ pub struct ConfirmContext<'a> {
     pub selected_items: &'a HashSet<String>,
     pub report_items: Vec<ScanResult>,
     pub clean_result: &'a mut Option<CleanResultDisplay>,
+    pub deleted_ids: &'a mut HashSet<String>,
 }
 
 pub fn handle_confirm_key(ctx: &mut ConfirmContext, code: KeyCode) -> Result<()> {
@@ -30,6 +32,9 @@ pub fn handle_confirm_key(ctx: &mut ConfirmContext, code: KeyCode) -> Result<()>
 
             let result = cleaner.clean(&items_to_clean, &config)?;
 
+            ctx.deleted_ids.clear();
+            ctx.deleted_ids.extend(ctx.selected_items.iter().cloned());
+
             *ctx.clean_result = Some(CleanResultDisplay {
                 success_count: result.success_count,
                 failed_count: result.failed_count,
@@ -49,10 +54,25 @@ pub fn handle_confirm_key(ctx: &mut ConfirmContext, code: KeyCode) -> Result<()>
 
 pub struct ResultContext<'a> {
     pub mode: &'a mut AppMode,
+    pub report: &'a mut Option<ScanReport>,
+    pub selected_items: &'a mut HashSet<String>,
+    pub deleted_ids: &'a mut HashSet<String>,
 }
 
 pub fn handle_result_key(ctx: &mut ResultContext, code: KeyCode) -> Result<()> {
     if matches!(code, KeyCode::Enter | KeyCode::Esc | KeyCode::Char('q')) {
+        if let Some(ref mut report) = ctx.report {
+            for category in &mut report.categories {
+                category
+                    .items
+                    .retain(|item| !ctx.deleted_ids.contains(&item.id));
+            }
+            report.categories.retain(|c| !c.items.is_empty());
+            report.total_size = report.categories.iter().map(|c| c.total_size()).sum();
+            report.total_items = report.categories.iter().map(|c| c.items.len()).sum();
+        }
+        ctx.selected_items.clear();
+        ctx.deleted_ids.clear();
         *ctx.mode = AppMode::Review;
     }
     Ok(())

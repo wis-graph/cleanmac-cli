@@ -24,6 +24,7 @@ pub struct App {
     pub available_scanners: Vec<ScannerInfo>,
     pub sort_mode: SortMode,
     pub space_lens: SpaceLensState,
+    pub deleted_ids: HashSet<String>,
 }
 
 impl App {
@@ -115,6 +116,7 @@ impl App {
             available_scanners,
             sort_mode: SortMode::default(),
             space_lens: SpaceLensState::default(),
+            deleted_ids: HashSet::new(),
         }
     }
 }
