@@ -105,28 +105,17 @@ cleanmac              # TUI 진입
 
 ### CLI 명령어 (사람용)
 ```bash
-# 스캔
-cleanmac scan                     # 전체 스캔 (사람용)
-cleanmac scan -c caches           # 특정 카테고리만
+# 카테고리 별 스캔 및 삭제
+cleanmac
 
-# 정리
-cleanmac apply --category caches  # 드라이 런
-cleanmac apply --category caches --yes  # 실제 삭제
-
-# 디스크 분석
+# 디스크 분석 및 삭제
 cleanmac space                    # 홈 디렉토리부터
-cleanmac space -p /path           # 특정 경로
 cleanmac space -t 8               # 8 스레드 사용
 
-# 앱 삭제
+# 앱 용량 분석 및 삭제
 cleanmac apps                     # 앱 목록 TUI
-cleanmac uninstall -n "App Name"  # 특정 앱 삭제
 
-# 설정
-cleanmac config show
-cleanmac config set -k key -v value
-
-# 히스토리
+# 삭제내역 히스토리
 cleanmac history                  # 삭제 히스토리 조회
 ```
 
